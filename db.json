@@ -1,0 +1,29 @@
+[
+  {
+    "color": "Test123",
+    "unit": "dona",
+    "price": 10000000,
+    "discount": 10,
+    "stockQuantity": 1,
+    "quantity": 1,
+    "size": "",
+    "material": "",
+    "saleStatus": "active",
+    "imageCount": 2,
+    "hasMainImage": true,
+    "length": 10,
+    "lengthUnit": "sm",
+    "width": 10,
+    "widthUnit": "sm",
+    "height": 10,
+    "heightUnit": "sm",
+    "weight": 10,
+    "weightUnit": "kg",
+    "memory": "",
+    "processor": "",
+    "event_number": "1077",
+    "event_date": "2025-06-18T19:00:00.000Z",
+    "mib_dalolatnoma": "",
+    "bs_product_id": "7799eb55-e8dd-4a44-bf2d-f65c03df97c2"
+  }
+]
