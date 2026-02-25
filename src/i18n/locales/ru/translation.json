@@ -1,0 +1,392 @@
+{
+  "navbar": {
+    "location": "Ташкент",
+    "contact": "Для связи",
+    "catalog": "КАТАЛОГ",
+    "search_placeholder": "Поиск товаров",
+    "brand_name": "ТАМОЖНЯ",
+    "brand_service": "СЕРВИС",
+    "download": "СКАЧАТЬ",
+    "notifications": "Уведомление",
+    "wishlist": "Избранное",
+    "cart": "Корзина",
+    "profile": "Профиль",
+    "admin": "Админ",
+    "login": "ВОЙТИ",
+    "search_results": "Результаты поиска",
+    "recent_searches": "Последние поиски",
+    "clear_searches": "Очистить",
+    "popular_searches": "Популярные поиски",
+    "no_results": "Ничего не найдено",
+    "no_categories": "Категории не найдены",
+    "no_subcategories": "В этой категории пока нет товаров",
+    "select_category": "Выберите категорию",
+    "home": "Главная"
+  },
+  "home": {
+    "title": "BS Market - Лучший онлайн-магазин в Узбекистане",
+    "description": "BS Market - лучший онлайн-магазин в Узбекистане. Электроника, одежда, товары для дома и многое другое по доступным ценам. Быстрая доставка и качественный сервис.",
+    "keywords": "онлайн-магазин, BS Market, электроника, одежда, товары для дома, Узбекистан, покупки, доступные цены, быстрая доставка"
+  },
+  "discounted_products": {
+    "title": "Товары со скидкой",
+    "no_products": "Сейчас нет товаров со скидкой",
+    "error_loading": "Произошла ошибка при загрузке товаров со скидкой",
+    "error_message": "Ошибка загрузки товаров со скидкой  ",
+    "retry_button": "Повторить"
+  },
+  "product_card": {
+    "reviews": "отзывов",
+    "loading": "Загрузка...",
+    "add_to_cart": "В корзину",
+    "add_to_cart_too": "корзину",
+    "add_to_cart_tooltip": "Добавить в корзину",
+    "decrease_tooltip": "Уменьшить",
+    "increase_tooltip": "Увеличить"
+  },
+  "common": {
+    "no_image": "Нет изображения"
+  },
+  "bestsellers": {
+    "title": "Популярные товары",
+    "no_products": "Товары пока недоступны",
+    "data_format_error": "Ошибка в формате данных",
+    "loading_error": "Произошла ошибка при загрузке данных",
+    "error_message": "Ошибка при загрузке товаров",
+    "retry_button": "Попробовать снова"
+  },
+  "catagories": {
+    "title": "Канцелярские товары"
+  },
+  "catagories1": {
+    "title": "Телефоны"
+  },
+  "catagories2": {
+    "title": "Бытовая техника"
+  },
+  "catagories3": {
+    "title": "Одежда"
+  },
+  "catagories4": {
+    "title": "Спорт и отдых"
+  },
+  "catagories5": {
+    "title": "Хобби и творчество"
+  },
+  "catagories6": {
+    "title": "Ноутбуки и компьютер"
+  },
+  "catagories7": {
+    "title": "Здоровье"
+  },
+  "catagories8": {
+    "title": "Автотовары"
+  },
+  "catagories9": {
+    "title": "Бытовые вещества"
+  },
+  "catagories10": {
+    "title": "Обувь"
+  },
+  "services": {
+    "title": "Сервис документов",
+    "catalog": "Каталог товаров",
+    "transport": "Транспортная услуга",
+    "terms": "Общие условия",
+    "stores": "Магазины"
+  },
+  "about": {
+    "title": "О нас",
+    "archive": "Архив оферт",
+    "regulations": "Устав",
+    "certificate": "Сертификат",
+    "promocodes": "Промокоды"
+  },
+  "catalogs": {
+    "title": "Каталоги",
+    "electronics": "Каталог электроники",
+    "clothes": "Каталог одежды",
+    "home": "Каталог бытовой техники",
+    "all": "Все каталоги"
+  },
+  "contact": {
+    "title": "Контактная информация",
+    "telegram": "Телеграм-бот поддержки",
+    "country": "Узбекистан",
+    "city": "Город Ташкент"
+  },
+  "newsletter": {
+    "title": "Подписывайтесь на новости",
+    "subtitle": "Будьте в курсе последних предложений и новостей",
+    "placeholder": "Ваш email...",
+    "button": "Подписаться",
+    "socail_media": "Свяжитесь с нами в социальных сетях"
+  },
+  "rights": "Все права защищены",
+  "policies": {
+    "privacy": "Политика конфиденциальности",
+    "terms": "Условия использования",
+    "cookies": "Политика Cookie"
+  },
+  "product": {
+    "products": "Товары",
+    "write_review": "Написать отзыв",
+    "colors": "Цвета",
+    "quantity": "Количество",
+    "in_stock": "В наличии",
+    "piece": "шт.",
+    "add_to_cart": "Добавить в корзину",
+    "buy_now": "Купить сейчас",
+    "description": "Описание",
+    "details": "Информация о продукте",
+    "color": "Цвет",
+    "unit": "Единица измерения",
+    "available": "В наличии",
+    "low_stock": "Малый остаток",
+    "out_of_stock": "Нет в наличии",
+    "with_discount": "Со скидкой {{discount}}%"
+  },
+  "categories": {
+    "loading": "Загрузка...",
+    "notFound": "Категории не найдены",
+    "more": "Ещё"
+  },
+  "search_results": {
+    "no_products_found": "Товары не найдены",
+    "fetch_error": "Произошла ошибка при загрузке товаров",
+    "category_results": "Результаты по категории",
+    "search_results": "Результаты поиска",
+    "results_for": "Результаты поиска для",
+    "showing_results": "Показано  {{total}} из {{start}}-{{end}} результатов",
+    "loading": "Загрузка...",
+    "error_title": "Произошла ошибка",
+    "try_again": "Попробовать снова",
+    "no_results_title": "Результаты не найдены",
+    "no_results_message": "По вашему поисковому запросу товары не найдены",
+    "search_tips": "Советы по поиску",
+    "tip_1": "Проверьте правильность написания слов",
+    "tip_2": "Попробуйте другие ключевые слова",
+    "tip_3": "Используйте более общие термины",
+    "previous": "Предыдущая",
+    "next": "Следующая"
+  },
+  "cart": {
+    "title": "Корзина",
+    "empty_cart": "Ваша корзина пуста",
+    "start_shopping": "Начать покупки",
+    "products_count": "товаров",
+    "select_all": "Выбрать все",
+    "selected": "выбрано",
+    "promo_code": "Промокод",
+    "enter_promo": "Введите промокод",
+    "apply": "Применить",
+    "promo_not_found": "Промокод не найден или недействителен",
+    "your_order": "Ваш заказ",
+    "products": "Товары",
+    "discount": "Скидка",
+    "total": "Итого",
+    "place_order": "Оформить заказ",
+    "register": "Зарегистрироваться",
+    "checking": "Проверяется...",
+    "select_product_message": "Выберите хотя бы один товар для оформления заказа",
+    "secure_payment": "Безопасная оплата",
+    "fast_delivery": "Быстрая доставка",
+    "auth_error": "Ошибка при проверке аутентификации",
+    "retry": "Попробуйте снова",
+    "or": "или",
+    "register_link": "Зарегистрируйтесь",
+    "sum": "сум"
+  },
+  "cart_product": {
+    "color": "Цвет",
+    "unit": "Единица",
+    "in_stock": "В наличии",
+    "remove_product": "Удалить товар",
+    "decrease": "Уменьшить",
+    "increase": "Увеличить",
+    "total_price": "Итого"
+  },
+  "wishes": {
+    "add_favorites": "Добавьте понравившиеся товары",
+    "no_likes": "К сожалению, у вас пока нет избранных товаров",
+    "back_home": "Вернуться на главную",
+    "favorites": "Избранные товары"
+  },
+  "variant": {
+    "select": "Выберите вариант",
+    "saved_account": "Будет сохранено в вашем аккаунте",
+    "single": "Один вариант",
+    "multiple": "Несколько вариантов",
+    "multiple_hint": "Чтобы выбрать несколько вариантов, нажмите на них",
+    "available": "Доступные варианты",
+    "selected": "выбрано",
+    "color": "Цвет",
+    "size": "Размер",
+    "quantity": "Количество",
+    "total": "Итого",
+    "add_single": "Добавить в корзину",
+    "add_multiple": "Добавить {{count}} вариантов в корзину",
+    "login_hint": "Сохраняйте товары, зарегистрировавшись"
+  },
+  "order_items": {
+    "title": "Товары заказа ({{count}} шт.)",
+    "color": "Цвет",
+    "unit": "Единица",
+    "stock": "На складе",
+    "total": "Итого",
+    "currency": "сум"
+  },
+  "orderSummary": {
+    "title": "Итог заказа",
+    "items": "Товары",
+    "delivery": "Доставка",
+    "calculating": "Рассчитывается...",
+    "discounts": "Скидки",
+    "total": "Итого",
+    "currency": "сум",
+    "submit": "Оформить заказ",
+    "submitting": "Заказ оформляется...",
+    "selectRegion": "Выберите регион",
+    "selectPickupPoint": "Выберите пункт выдачи",
+    "and": "и"
+  },
+  "payment": {
+    "title": "Способ оплаты",
+    "clickTitle": "Оплата через Click",
+    "clickDesc": "Оплатите безопасно через систему Click",
+    "paymeTitle": "Оплата через Payme",
+    "paymeDesc": "Скоро... (в процессе интеграции)",
+    "clickButton": "Оплатить через Click",
+    "paymeButton": "Оплатить через Payme"
+  },
+  "pickupPoints": {
+    "title": "Пункт выдачи BS Market",
+    "selectRegion": "Выберите область",
+    "region": "Область",
+    "loadingRegions": "Загрузка...",
+    "chooseRegion": "Выберите область",
+    "choosePickup": "Выберите пункт выдачи",
+    "loadingPickup": "Загрузка пунктов...",
+    "noPickup": "В этой области нет пунктов выдачи",
+    "showMore": "Показать больше (осталось {{count}})",
+    "showLess": "Показать меньше",
+    "deliveryInfo": "Информация о доставке",
+    "calculating": "Рассчитывается...",
+    "deliveryPrice": "Стоимость доставки:",
+    "totalWeight": "Общий вес:",
+    "recipient": "Получатель",
+    "unknown": "Неизвестно",
+    "noPhone": "Номер телефона отсутствует"
+  },
+  "productModal": {
+    "quantity": "Количество",
+    "color": "Цвет",
+    "unit": "Единица",
+    "description": "Описание"
+  },
+  "checkout": {
+    "title": "Заказ",
+    "loading": "Загрузка...",
+    "order": "Оформить заказ",
+    "deliveryError": "Ошибка при расчете доставки",
+    "selectRegion": "Пожалуйста, выберите регион!",
+    "selectPickup": "Пожалуйста, выберите пункт выдачи!"
+  },
+  "profile": {
+    "loading": "Загрузка данных профиля...",
+    "error": "Ошибка при загрузке профиля",
+    "retry": "Повторить",
+    "notFound": "Данные пользователя не найдены",
+    "hide": "Скрыть",
+    "personal": "Личные данные",
+    "orders": "Мои заказы",
+    "favorites": "Избранное",
+    "notifications": "Уведомления",
+    "logout": "Выйти",
+    "online": "В сети",
+    "role": "Тип пользователя",
+    "admin": "Админ",
+    "worker": "Сотрудник",
+    "client": "Клиент",
+    "interests": "Интересы",
+    "personal_info": "Личная информация",
+    "labels": {
+      "role": "Тип пользователя",
+      "member_since": "Дата регистрации",
+      "interests_count": "Количество интересов"
+    },
+    "fields": {
+      "firstName": "Имя",
+      "lastName": "Фамилия",
+      "phone": "Номер телефона",
+      "email": "Электронная почта",
+      "gender": "Пол"
+    },
+    "placeholders": {
+      "firstName": "Введите имя",
+      "lastName": "Введите фамилию"
+    },
+    "gender": {
+      "male": "Мужской",
+      "female": "Женский",
+      "other": "Другой",
+      "unknown": "Не указан"
+    },
+    "roles": {
+      "admin": "Администратор",
+      "worker": "Сотрудник",
+      "customer": "Клиент"
+    },
+    "actions": {
+      "edit": "Редактировать",
+      "cancel": "Отмена",
+      "save": "Сохранить",
+      "saving": "Сохранение..."
+    },
+    "validation": {
+      "required_fields": "Имя, фамилия и телефон обязательны",
+      "invalid_email": "Неверный формат email",
+      "invalid_phone": "Телефон должен быть в формате +998XXXXXXXXX"
+    },
+    "errors": {
+      "update_failed": "Ошибка при обновлении профиля"
+    }
+  },
+  "toliq tugamay qoldi": {},
+  "orders": {
+    "myOrders": "Мои заказы",
+    "loading": "Загрузка заказов...",
+    "noOrders": "Заказы отсутствуют.",
+    "firstOrder": "Сделайте свой первый заказ!",
+    "errorTitle": "Произошла ошибка",
+    "retry": "Повторить",
+    "refresh": "Обновить",
+    "view": "Просмотр",
+    "back": "← Назад",
+    "order": "Заказ",
+    "status": {
+      "delivered": "Доставлен",
+      "shipping": "В пути",
+      "processing": "В обработке",
+      "cancelled": "Отменен"
+    },
+    "paid": "Оплачен",
+    "unpaid": "Не оплачен",
+    "paymentMethod": "Способ оплаты",
+    "online": "Онлайн",
+    "cash": "Наличные",
+    "leaveReview": "Оставить отзыв",
+    "yourReview": "Ваш отзыв",
+    "rating": "Оценка",
+    "comment": "Комментарий",
+    "sendReview": "Отправить отзыв",
+    "deleteReview": "Удалить отзыв",
+    "products": "Товары",
+    "total": "Итого",
+    "date": "Дата",
+    "delivery": "Доставка",
+    "close": "Закрыть",
+    "print": "Печать",
+    "qrTitle": "QR код заказа"
+  }
+}
