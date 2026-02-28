@@ -147,7 +147,7 @@ export default function Home() {
   return (
     <div className="bg-[#ECF4FF]">
       <Head>
-        <title>BS Market - O'zbekistondagi Eng Yaxshi Onlayn Do'kon</title>
+        <title>BS MARKET</title>
         <meta
           name="description"
           content="BS Market - O'zbekistondagi eng yaxshi onlayn do'kon. Elektronika, kiyim, uy-ro'zg'or buyumlari va boshqa mahsulotlarni arzon narxlarda xarid qiling. Tez yetkazib berish va sifatli xizmat."
@@ -165,8 +165,8 @@ export default function Home() {
 
         <link rel="canonical" href="https://bsmarket.uz" />
 
-        <link rel="icon" type="image/png" href="/images/Logo.png" />
-        <link rel="apple-touch-icon" href="/images/Logo.png" />
+        <link rel="icon" type="image/jpeg" href="/images/telegram-cloud-document-2-5352691370182082102.jpg" />
+        <link rel="apple-touch-icon" href="/images/telegram-cloud-document-2-5352691370182082102.jpg" />
 
         <meta property="og:type" content="website" />
         <meta
@@ -209,7 +209,7 @@ export default function Home() {
         <link rel="dns-prefetch" href="//fonts.googleapis.com" />
         <link rel="dns-prefetch" href="//api.bsmarket.uz" />
 
-        <link rel="preload" href="/images/Logo.png" as="image" />
+        <link rel="preload" href="/images/telegram-cloud-document-2-5352691370182082102.jpg" as="image" />
       </Head>
 
       <Navbar />

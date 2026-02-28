@@ -25,7 +25,7 @@ export default function Wishes() {
     return (
       <div>
         <Head>
-          <title>Baraka Savdo</title>
+          <title>BS MARKET</title>
           <meta name="description" content="Online shopping platform" />
         </Head>
         <Navbar />
@@ -50,7 +50,7 @@ export default function Wishes() {
   return (
     <div>
       <Head>
-        <title>Baraka Savdo</title>
+        <title>BS MARKET</title>
         <meta name="description" content="Online shopping platform" />
       </Head>
       <Navbar />

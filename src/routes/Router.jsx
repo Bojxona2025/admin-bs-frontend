@@ -20,6 +20,7 @@ const OrderPage = lazy(() =>
 );
 const Dashboard = lazy(() => import("../pages/dashboard/Dashboard"));
 const AccountsPage = lazy(() => import("../pages/receipts/accountspage"));
+const PaymentsPage = lazy(() => import("../pages/receipts/PaymentsPage"));
 const Categories = lazy(() =>
   import("../pages/categories/Categories").then((m) => ({ default: m.Categories }))
 );
@@ -41,6 +42,9 @@ const ProfilePage = lazy(() => import("../components/profile/profile"));
 const SettingsPage = lazy(() => import("../components/profile/sozlamalar"));
 const EmuIntegrationPage = lazy(() =>
   import("../pages/emu_integration").then((m) => ({ default: m.EmuIntegrationPage }))
+);
+const EmuIntegrationLivePage = lazy(() =>
+  import("../pages/emu_integration/Live").then((m) => ({ default: m.EmuIntegrationLivePage }))
 );
 const OrderDetailPage = lazy(() =>
   import("../pages/orders/Detail").then((m) => ({ default: m.OrderDetailPage }))
@@ -244,6 +248,14 @@ export const Router = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/money/payments"
+          element={
+            <ProtectedRoute>
+              <PaymentsPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/user/:id"
@@ -306,6 +318,22 @@ export const Router = () => {
           element={
             <ProtectedRoute>
               <EmuIntegrationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/emu/integration/live"
+          element={
+            <ProtectedRoute>
+              {loading ? (
+                <div className="min-h-[50vh] flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#249B73] border-t-transparent" />
+                </div>
+              ) : isSuperAdminRole(actorRole) ? (
+                <EmuIntegrationLivePage />
+              ) : (
+                <Navigate to="/emu/integration" replace />
+              )}
             </ProtectedRoute>
           }
         />

@@ -31,7 +31,13 @@ export const UserDetail = () => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      await Promise.all([fetchUser(), fetchOrders(), fetchCarts()]);
+      const resolvedUserId = await fetchUser();
+      if (resolvedUserId) {
+        await Promise.all([fetchOrders(resolvedUserId), fetchCarts(resolvedUserId)]);
+      } else {
+        setOrders([]);
+        setCarts([]);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -41,26 +47,40 @@ export const UserDetail = () => {
 
   async function fetchUser() {
     try {
-      let { data } = await $api.get(`/users/get/by/${id}`);
-      setUserData(data.userData);
+      if (!id) return null;
+      if (String(id).toLowerCase() === "me") {
+        const { data } = await $api.get("/users/profile/me");
+        const meData = data?.user || data?.userData || data?.data || data;
+        setUserData(meData || null);
+        return meData?._id || meData?.id || null;
+      }
+      const { data } = await $api.get(`/users/get/by/${id}`);
+      const targetData = data?.userData || data?.user || data?.data || null;
+      setUserData(targetData);
+      return targetData?._id || targetData?.id || id;
     } catch (error) {
       console.log(error);
+      setUserData(null);
+      return null;
     }
   }
 
-  async function fetchOrders() {
+  async function fetchOrders(targetUserId) {
     try {
-      let { data } = await $api.get(`/order/get/by/user/${id}?limit=10&page=1`);
+      let { data } = await $api.get(
+        `/order/get/by/user/${targetUserId}?limit=10&page=1`
+      );
       setOrders(data.data || []);
     } catch (error) {
       console.log(error);
+      setOrders([]);
     }
   }
 
-  async function fetchCarts() {
+  async function fetchCarts(targetUserId) {
     try {
       let { data } = await $api.get(
-        `/cart/get/user/carts/${id}?limit=10&page=1`
+        `/cart/get/user/carts/${targetUserId}?limit=10&page=1`
       );
 
       if (data.carts) {

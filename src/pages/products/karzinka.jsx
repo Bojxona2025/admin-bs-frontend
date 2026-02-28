@@ -147,9 +147,18 @@ export const TrashProducts = () => {
     e.stopPropagation();
 
     try {
-      await productsApi.update(productId, {
-        status: "active",
-      });
+      const target = products.data.find((p) => p._id === productId);
+      const fd = new FormData();
+      fd.append("status", "active");
+      const companyId =
+        target?.companyId?._id ||
+        target?.companyId ||
+        target?.company?._id ||
+        target?.company;
+      if (companyId && typeof companyId === "string") {
+        fd.append("companyId", companyId);
+      }
+      await productsApi.update(productId, fd);
 
       setProducts((prevProducts) => ({
         ...prevProducts,
@@ -161,7 +170,7 @@ export const TrashProducts = () => {
     }
 
     setActiveDropdown(null);
-  }, []);
+  }, [products.data]);
 
   const handleDeleteProduct = useCallback(async (productId, e) => {
     e.stopPropagation();

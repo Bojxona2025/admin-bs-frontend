@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Search,
-  ExternalLink,
   Info,
   Plus,
   ChevronLeft,
@@ -13,13 +12,18 @@ import {
   Eye,
   X,
 } from "lucide-react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import $api from "../../http/api";
 import { CreateCategoryModal } from "./CreateCategoryModal";
 import { UpdateCategoryModal } from "./UpdateCategoryModal";
 import { CreateSubCategoryModal } from "./CreateSubtypeModal";
+import { useSelector } from "react-redux";
 
 export const Categories = () => {
+  const { user } = useSelector((state) => state.user);
+  const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
+  const isSuperAdmin = actorRole === "superadmin";
+
   const API_ORIGIN = (import.meta.env.VITE_BASE_URL || "")
     .replace(/\/api\/?$/i, "")
     .replace(/\/+$/, "");
@@ -123,6 +127,7 @@ export const Categories = () => {
     };
   }, []);
   const handleDeleteCategory = async (categoryId) => {
+    if (!isSuperAdmin) return;
     try {
       await $api.delete(`/categories/delete/${categoryId}`);
       await fetchCategories();
@@ -207,6 +212,7 @@ export const Categories = () => {
   };
 
   const handleSaveCategory = async (formData) => {
+    if (!isSuperAdmin) return;
     console.log("Kategoriya saqlash:", formData);
     try {
       const response = await $api.post("/categories/create", formData, {
@@ -226,6 +232,7 @@ export const Categories = () => {
   };
 
   const handleUpdateCategory = async (formData, categoryId) => {
+    if (!isSuperAdmin) return;
     if (!categoryId) {
       console.error("Category ID is missing!");
       throw new Error("Category ID is required for update");
@@ -249,6 +256,7 @@ export const Categories = () => {
   };
 
   const handleSaveSubCategory = async (formData, categoryId) => {
+    if (!isSuperAdmin) return;
     try {
       const response = await $api.post("/sub/types/create", formData, {
         headers: {
@@ -328,11 +336,13 @@ export const Categories = () => {
   };
 
   const handleEdit = (solution) => {
+    if (!isSuperAdmin) return;
     setSelectedCategory(solution);
     setIsUpdateModalOpen(true);
   };
 
   const handleCreateSubCategory = (category) => {
+    if (!isSuperAdmin) return;
     setSelectedCategoryForSub(category);
     setIsCreateSubCategoryModalOpen(true);
   };
@@ -362,7 +372,7 @@ export const Categories = () => {
     const isLoading = loadingSubtypes[categoryId];
 
     return (
-      <div className="dropdown-menu absolute top-8 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-64 max-w-80">
+      <div className="dropdown-menu absolute top-10 right-0 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
         <div className="p-3 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <h4 className="font-medium text-gray-900">Sub kategoriyalar</h4>
@@ -395,7 +405,7 @@ export const Categories = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h5 className="font-medium text-gray-900 text-sm">
+                    <h5 className="font-medium text-gray-900 text-sm truncate">
                       {subtype.name}
                     </h5>
                     {subtype.description && (
@@ -416,25 +426,27 @@ export const Categories = () => {
           )}
         </div>
 
-        <div className="p-3 border-t border-gray-100">
-          <button
-            onClick={() => {
-              setShowSubtypesMenu(null);
-              handleCreateSubCategory({ _id: categoryId, name: categoryName });
-            }}
-            className="w-full cursor-pointer flex items-center justify-center px-3 py-2 bg-[#2db789] text-white rounded-lg hover:bg-[#1a6691] transition-colors text-sm font-medium"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Yangi sub kategoriya
-          </button>
-        </div>
+        {isSuperAdmin && (
+          <div className="p-3 border-t border-gray-100">
+            <button
+              onClick={() => {
+                setShowSubtypesMenu(null);
+                handleCreateSubCategory({ _id: categoryId, name: categoryName });
+              }}
+              className="w-full cursor-pointer flex items-center justify-center px-3 py-2 bg-[#2db789] text-white rounded-lg hover:bg-[#1a6691] transition-colors text-sm font-medium"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Yangi sub kategoriya
+            </button>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50 p-3 sm:p-5 lg:p-6">
-      <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-5 mb-4 sm:mb-6">
+      <div className="bg-gradient-to-r from-white to-emerald-50/40 border border-emerald-100 rounded-2xl p-3 sm:p-5 mb-4 sm:mb-6 shadow-sm">
         <div className="py-1">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-3 sm:mb-6">
             <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-0">
@@ -442,13 +454,15 @@ export const Categories = () => {
               <Info className="w-5 h-5 text-slate-400" />
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center justify-center cursor-pointer space-x-2 px-4 py-2 bg-[#249B73] text-white rounded-lg hover:bg-[#1f8966] focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Yangi kategoriya</span>
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="flex items-center justify-center cursor-pointer space-x-2 px-4 py-2 bg-[#249B73] text-white rounded-lg hover:bg-[#1f8966] focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Yangi kategoriya</span>
+                </button>
+              )}
               <div className="flex items-center w-full sm:w-auto">
                 <div className="relative w-full sm:w-[280px]">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
@@ -500,12 +514,12 @@ export const Categories = () => {
       <div className="mt-2">
         <div className="flex flex-col lg:flex-row gap-4 pb-2">
           <div className="lg:w-72 lg:sticky lg:top-20 h-fit">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
               <h3 className="text-lg font-semibold text-slate-900">Filtrlar</h3>
             </div>
 
             {/* Filters Section */}
-            <div className="mt-3 bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="mt-3 bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm">
               <div className="mb-4">
                 <label className="text-xs font-medium text-slate-700 mb-2 block">
                   Mashhur
@@ -572,7 +586,7 @@ export const Categories = () => {
                 {categoryData.map((category) => (
                   <div
                     key={category._id}
-                    className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-slate-200 relative"
+                    className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-visible border border-emerald-100 relative"
                   >
                     {/* Three dots menu */}
                     <div className="absolute top-3 right-3 z-10">
@@ -596,7 +610,7 @@ export const Categories = () => {
                     </div>
 
                     {/* Image */}
-                    <div className="relative overflow-hidden h-44 bg-slate-100">
+                    <div className="relative overflow-hidden h-44 bg-gradient-to-br from-slate-100 to-slate-200 rounded-t-2xl">
                       <img
                         src={toCategoryImageUrl(category.category_img) || "/avatar-placeholder.svg"}
                         alt={category.name}
@@ -615,34 +629,40 @@ export const Categories = () => {
                     </div>
 
                     {/* Content */}
-                    <div className="p-5">
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2 group-hover:text-emerald-700 transition-colors">
+                    <div className="p-5 flex flex-col gap-3">
+                      <h3 className="text-lg font-semibold text-slate-900 group-hover:text-emerald-700 transition-colors line-clamp-2 min-h-[56px]">
                         {category.name}
                       </h3>
 
-                      <p className="text-slate-600 text-sm mb-4">
+                      <p className="text-slate-600 text-sm min-h-[20px]">
                         {category.top
                           ? "⭐ Mashhur kategoriya"
                           : "Standart kategoriya"}
                       </p>
 
                       {/* Actions */}
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEdit(category)}
-                          className="flex-1 cursor-pointer flex items-center justify-center px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm font-medium"
-                        >
-                          <Edit className="w-4 h-4 mr-2" />
-                          Tahrirlash
-                        </button>
-                        <button
-                          onClick={() => handleCreateSubCategory(category)}
-                          className="flex-1 cursor-pointer flex items-center justify-center px-4 py-2 bg-[#249B73] text-white rounded-lg transition-colors text-sm font-medium hover:bg-[#1f8966]"
-                        >
-                          <FolderPlus className="w-4 h-4 mr-2" />
-                          Sub kategoriya
-                        </button>
-                      </div>
+                      {isSuperAdmin ? (
+                        <div className="grid grid-cols-1 gap-2 mt-auto">
+                          <button
+                            onClick={() => handleEdit(category)}
+                            className="cursor-pointer flex items-center justify-center px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm font-medium"
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Tahrirlash
+                          </button>
+                          <button
+                            onClick={() => handleCreateSubCategory(category)}
+                            className="cursor-pointer flex items-center justify-center px-4 py-2 bg-[#249B73] text-white rounded-lg transition-colors text-sm font-medium hover:bg-[#1f8966]"
+                          >
+                            <FolderPlus className="w-4 h-4 mr-2" />
+                            Sub kategoriya qo'shish
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                          Faqat ko'rish rejimi
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -762,13 +782,13 @@ export const Categories = () => {
       )}
 
       <CreateCategoryModal
-        isOpen={isCreateModalOpen}
+        isOpen={isSuperAdmin && isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSave={handleSaveCategory}
       />
 
       <UpdateCategoryModal
-        isOpen={isUpdateModalOpen}
+        isOpen={isSuperAdmin && isUpdateModalOpen}
         onClose={() => {
           setIsUpdateModalOpen(false);
           setSelectedCategory(null);
@@ -782,7 +802,7 @@ export const Categories = () => {
       />
 
       <CreateSubCategoryModal
-        isOpen={isCreateSubCategoryModalOpen}
+        isOpen={isSuperAdmin && isCreateSubCategoryModalOpen}
         onClose={() => {
           setIsCreateSubCategoryModalOpen(false);
           setSelectedCategoryForSub(null);

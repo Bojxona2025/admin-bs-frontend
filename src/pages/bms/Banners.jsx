@@ -25,9 +25,17 @@ import {
 import $api from "../../http/api";
 import DeleteModal from "../../components/modals/delete/DeleteModal";
 import { DeleteConfirmModal } from "../../components/modals/delete_confirm/DeleteConfirmModal";
+import { toAssetUrl } from "../../utils/imageUrl";
 
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString("uz-UZ");
+};
+const normalizeRole = (role) => String(role || "").toLowerCase().replace(/[_\s]/g, "");
+const getBannerImageUrl = (banner, type = "desktop") => {
+  if (!banner) return "";
+  const desktopPath = banner.desktop_image_url || banner.image_url || "";
+  const mobilePath = banner.mobile_image_url || banner.image_url || "";
+  return toAssetUrl(type === "mobile" ? mobilePath : desktopPath);
 };
 
 const BannerAdminPanel = () => {
@@ -64,16 +72,17 @@ const BannerAdminPanel = () => {
 
   async function fetchBanners(position = "all") {
     try {
-      let url = `/banners/all?limit=100&page=1`;
-
-      if (position !== "all") {
-        url += `&position=${position}`;
-      }
-
-      let { data } = await $api.get(url);
-      setBanners(data.data);
+      const { data } = await $api.get("/banners/all", {
+        params: {
+          page: 1,
+          limit: 100,
+          ...(position !== "all" ? { position } : {}),
+        },
+      });
+      setBanners(data?.data || data?.banners || []);
     } catch (error) {
       console.log(error);
+      setBanners([]);
     }
   }
 
@@ -149,13 +158,15 @@ const BannerAdminPanel = () => {
   }, [banners, searchTerm, filterPosition]);
 
   const handleSubmit = async () => {
+    const role = normalizeRole(user?.role);
+    const isSuperAdmin = role === "superadmin";
     const companyId =
       selectedCompanyId ||
       user?.companyId?._id ||
       user?.companyId ||
       localStorage.getItem("companyId");
 
-    if (!companyId) {
+    if (isSuperAdmin && !companyId) {
       setError("Kompaniyani tanlang.");
       return;
     }
@@ -168,7 +179,9 @@ const BannerAdminPanel = () => {
     try {
       const formDataToSend = new FormData();
       formDataToSend.append("position", formData.position);
-      formDataToSend.append("companyId", companyId);
+      if (companyId) {
+        formDataToSend.append("companyId", companyId);
+      }
 
       if (formData.desktopImage) {
         formDataToSend.append("banner", formData.desktopImage);
@@ -286,13 +299,9 @@ const handleBulkDelete = async () => {
     setEditingBanner(banner);
     setFormData({
       desktopImage: null,
-      desktopPreview: banner.desktop_image_url
-        ? import.meta.env.VITE_BASE_URL + banner.desktop_image_url
-        : import.meta.env.VITE_BASE_URL + banner.image_url,
+      desktopPreview: getBannerImageUrl(banner, "desktop"),
       mobileImage: null,
-      mobilePreview: banner.mobile_image_url
-        ? import.meta.env.VITE_BASE_URL + banner.mobile_image_url
-        : import.meta.env.VITE_BASE_URL + banner.image_url,
+      mobilePreview: getBannerImageUrl(banner, "mobile"),
       position: banner.position,
     });
     setSelectedCompanyId(
@@ -476,12 +485,7 @@ const handleBulkDelete = async () => {
                       <div className="flex items-center gap-3">
                         <Monitor className="w-4 h-4 text-emerald-600" />
                         <img
-                          src={
-                            banner.desktop_image_url
-                              ? import.meta.env.VITE_BASE_URL +
-                                banner.desktop_image_url
-                              : import.meta.env.VITE_BASE_URL + banner.image_url
-                          }
+                          src={getBannerImageUrl(banner, "desktop")}
                           alt="Kompyuter banneri"
                           loading="lazy"
                           onClick={() => handleImagePreview(banner, "desktop")}
@@ -494,12 +498,7 @@ const handleBulkDelete = async () => {
                       <div className="flex items-center gap-3">
                         <Smartphone className="w-4 h-4 text-emerald-600" />
                         <img
-                          src={
-                            banner.mobile_image_url
-                              ? import.meta.env.VITE_BASE_URL +
-                                banner.mobile_image_url
-                              : import.meta.env.VITE_BASE_URL + banner.image_url
-                          }
+                          src={getBannerImageUrl(banner, "mobile")}
                           alt="Telefon banneri"
                           loading="lazy"
                           onClick={() => handleImagePreview(banner, "mobile")}
@@ -804,11 +803,7 @@ const handleBulkDelete = async () => {
                     {previewBanner.position === "header" && (
                       <div className="w-full">
                         <img
-                          src={
-                            previewBanner.desktop_image_url
-                              ? import.meta.env.VITE_BASE_URL + previewBanner.desktop_image_url
-                              : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                          }
+                          src={getBannerImageUrl(previewBanner, "desktop")}
                           alt="Header Banner"
                           className="w-full h-auto object-cover select-none"  
                           style={{ maxHeight: '300px' }}
@@ -821,11 +816,7 @@ const handleBulkDelete = async () => {
                   {previewBanner.position === "mid_header" && (
                     <div className="p-4">
                       <img
-                        src={
-                          previewBanner.desktop_image_url
-                            ? import.meta.env.VITE_BASE_URL + previewBanner.desktop_image_url
-                            : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                        }
+                        src={getBannerImageUrl(previewBanner, "desktop")}
                         alt="Mid Header Banner"
                         className="w-full h-auto object-cover rounded-lg select-none"
                         style={{ maxHeight: '250px' }}
@@ -851,11 +842,7 @@ const handleBulkDelete = async () => {
                   {previewBanner.position === "footer_header" && (
                     <div className="p-4 bg-gray-50">
                       <img
-                        src={
-                          previewBanner.desktop_image_url
-                            ? import.meta.env.VITE_BASE_URL + previewBanner.desktop_image_url
-                            : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                        }
+                        src={getBannerImageUrl(previewBanner, "desktop")}
                         alt="Footer Header Banner"
                         className="w-full h-auto object-cover rounded-lg select-none"
                         style={{ maxHeight: '200px' }}
@@ -908,11 +895,7 @@ const handleBulkDelete = async () => {
                         <span className="text-sm text-gray-600">Maxsus joy</span>
                       </div>
                       <img
-                        src={
-                          previewBanner.desktop_image_url
-                            ? import.meta.env.VITE_BASE_URL + previewBanner.desktop_image_url
-                            : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                        }
+                        src={getBannerImageUrl(previewBanner, "desktop")}
                         alt="Other Banner"
                         className="w-full h-auto object-cover rounded-lg mx-auto select-none"
                         style={{ maxHeight: '180px' }}
@@ -939,11 +922,7 @@ const handleBulkDelete = async () => {
                     {previewBanner.position === "header" && (
                       <div className="w-full">
                         <img
-                          src={
-                            previewBanner.mobile_image_url
-                              ? import.meta.env.VITE_BASE_URL + previewBanner.mobile_image_url
-                              : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                          }
+                          src={getBannerImageUrl(previewBanner, "mobile")}
                           loading="lazy"
                           alt="Telefon tepa banneri"
                           className="w-full h-auto object-cover"
@@ -957,11 +936,7 @@ const handleBulkDelete = async () => {
                   {previewBanner.position === "mid_header" && (
                     <div className="p-3">
                       <img
-                        src={
-                          previewBanner.mobile_image_url
-                            ? import.meta.env.VITE_BASE_URL + previewBanner.mobile_image_url
-                            : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                        }
+                        src={getBannerImageUrl(previewBanner, "mobile")}
                         loading="lazy"
                         alt="Telefon o'rta banneri"
                         className="w-full h-auto object-cover rounded-lg select-none"
@@ -988,11 +963,7 @@ const handleBulkDelete = async () => {
                   {previewBanner.position === "footer_header" && (
                     <div className="p-3 bg-gray-50">
                       <img
-                        src={
-                          previewBanner.mobile_image_url
-                            ? import.meta.env.VITE_BASE_URL + previewBanner.mobile_image_url
-                            : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                        }
+                        src={getBannerImageUrl(previewBanner, "mobile")}
                         loading="lazy"
                         alt="Telefon pastki banneri"
                         className="w-full h-auto object-cover rounded-lg select-none"
@@ -1028,11 +999,7 @@ const handleBulkDelete = async () => {
                         <span className="text-xs text-gray-600">Maxsus joy</span>
                       </div>
                       <img
-                        src={
-                          previewBanner.mobile_image_url
-                            ? import.meta.env.VITE_BASE_URL + previewBanner.mobile_image_url
-                            : import.meta.env.VITE_BASE_URL + previewBanner.image_url
-                        }
+                        src={getBannerImageUrl(previewBanner, "mobile")}
                         loading="lazy"
                         alt="Telefon qo'shimcha banneri"
                         className="w-full h-auto object-cover rounded-lg select-none"

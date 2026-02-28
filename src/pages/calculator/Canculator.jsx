@@ -21,21 +21,18 @@ export const DeliveryCalculator = () => {
   }, [isSuperAdmin, actorCompanyId]);
 
   async function fetchCompanies() {
-    const endpoints = ["/company/all", "/companies/all", "/company/get/all"];
-    for (const endpoint of endpoints) {
-      try {
-        const { data } = await $api.get(endpoint);
-        const list = data?.data || data?.companies || [];
-        setCompanies(list);
-        if (!selectedCompanyId && list?.[0]?._id) {
-          setSelectedCompanyId(list[0]._id);
-        }
-        return;
-      } catch {
-        // try next endpoint
+    try {
+      const { data } = await $api.get("/company/all", {
+        params: { page: 1, limit: 100 },
+      });
+      const list = data?.data || data?.companies || [];
+      setCompanies(list);
+      if (!selectedCompanyId && list?.[0]?._id) {
+        setSelectedCompanyId(list[0]._id);
       }
+    } catch {
+      setCompanies([]);
     }
-    setCompanies([]);
   }
 
   const frameSrc = useMemo(() => {

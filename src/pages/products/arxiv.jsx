@@ -20,6 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import productsApi from "../../http/products";
+import $api from "../../http/api";
 import { NavLink, useNavigate } from "react-router-dom";
 import Pagination from "./pagination";
 import LazyImage from "../../components/image/LazyImage";
@@ -35,6 +36,8 @@ export const ArchiveProducts = () => {
   const [viewMode, setViewMode] = useState("grid");
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [actionLoadingId, setActionLoadingId] = useState("");
 
   // Search state
   const [searchTerm, setSearchTerm] = useState("");
@@ -90,6 +93,7 @@ export const ArchiveProducts = () => {
   const handleRefresh = useCallback(() => {
     setSearchTerm("");
     setDebouncedSearchTerm("");
+    setActionError("");
     setProducts((prev) => ({ ...prev, currentPage: 1 }));
   }, []);
 
@@ -147,13 +151,28 @@ export const ArchiveProducts = () => {
     fetchProducts(products.currentPage, debouncedSearchTerm);
   }, [fetchProducts, products.currentPage, debouncedSearchTerm]);
 
-  const handleActivateProduct = useCallback(async (productId, e) => {
+  const updateProductStatus = useCallback(async (product, nextStatus) => {
+    const productId = product?._id;
+    if (!productId) throw new Error("Product id topilmadi");
+
+    const fd = new FormData();
+    fd.append("status", nextStatus);
+    const companyId = product?.companyId?._id || product?.companyId || product?.company?._id || product?.company;
+    if (companyId && typeof companyId === "string") {
+      fd.append("companyId", companyId);
+    }
+
+    await productsApi.update(productId, fd);
+  }, []);
+
+  const handleActivateProduct = useCallback(async (product, e) => {
     e.stopPropagation();
+    setActionError("");
+    const productId = product?._id;
+    setActionLoadingId(productId || "");
 
     try {
-      await productsApi.update(productId, {
-        status: "active",
-      });
+      await updateProductStatus(product, "active");
 
       setProducts((prevProducts) => ({
         ...prevProducts,
@@ -164,18 +183,26 @@ export const ArchiveProducts = () => {
       console.log("Mahsulot arxivdan chiqarildi");
     } catch (error) {
       console.error("Mahsulotni arxivdan chiqarishda xatolik:", error);
+      setActionError("Faollashtirishda xatolik yuz berdi. Qayta urinib ko'ring.");
+    } finally {
+      setActionLoadingId("");
     }
 
     setActiveDropdown(null);
-  }, []);
+  }, [updateProductStatus]);
 
-  const handleMoveToTrash = useCallback(async (productId, e) => {
+  const handleMoveToTrash = useCallback(async (product, e) => {
     e.stopPropagation();
+    setActionError("");
+    const productId = product?._id;
+    setActionLoadingId(productId || "");
 
     try {
-      await productsApi.update(productId, {
-        status: "deleted",
-      });
+      try {
+        await updateProductStatus(product, "deleted");
+      } catch (_) {
+        await $api.patch(`/products/archive/to/trash/${productId}`);
+      }
 
       setProducts((prevProducts) => ({
         ...prevProducts,
@@ -184,10 +211,13 @@ export const ArchiveProducts = () => {
       }));
     } catch (error) {
       console.error("Mahsulotni korzinkaga o'tkazishda xatolik:", error);
+      setActionError("O'chirishda xatolik yuz berdi. Qayta urinib ko'ring.");
+    } finally {
+      setActionLoadingId("");
     }
 
     setActiveDropdown(null);
-  }, []);
+  }, [updateProductStatus]);
 
   const toggleDropdown = useCallback((productId, e) => {
     e.stopPropagation();
@@ -245,18 +275,20 @@ export const ArchiveProducts = () => {
             {activeDropdown === product._id && (
               <div className="absolute right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-lg shadow-xl py-1 min-w-[150px] z-30">
                 <button
-                  onClick={(e) => handleActivateProduct(product._id, e)}
+                  onClick={(e) => handleActivateProduct(product, e)}
+                  disabled={actionLoadingId === product._id}
                   className="w-full px-3 cursor-pointer py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors duration-200"
                 >
                   <RotateCcw size={14} />
-                  Faollashtirish
+                  {actionLoadingId === product._id ? "Kutilmoqda..." : "Faollashtirish"}
                 </button>
                 <button
-                  onClick={(e) => handleMoveToTrash(product._id, e)}
+                  onClick={(e) => handleMoveToTrash(product, e)}
+                  disabled={actionLoadingId === product._id}
                   className="w-full px-3 cursor-pointer py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors duration-200"
                 >
                   <Trash2 size={14} />
-                  O'chirish
+                  {actionLoadingId === product._id ? "Kutilmoqda..." : "O'chirish"}
                 </button>
               </div>
             )}
@@ -503,6 +535,12 @@ export const ArchiveProducts = () => {
           </div>
         </div>
       </div>
+
+      {actionError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
 
       {dataLoad && (
         <div className="flex justify-center items-center py-20">

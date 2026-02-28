@@ -25,7 +25,7 @@ const extractProfileFromResponse = (data) =>
 export const fetchUserProfile = createAsyncThunk(
   "user/fetchProfile",
   async (_, thunkAPI) => {
-    const endpoints = ["/users/my/profile", "/users/profile/me", "/users/profile"];
+    const endpoints = ["/users/profile/me"];
 
     try {
       for (const endpoint of endpoints) {

@@ -250,18 +250,8 @@ export default function ProfilePage() {
     setLoadingProfile(true);
     setProfileError("");
     try {
-      let data;
-      try {
-        const res = await $api.get("/users/my/profile");
-        data = res.data;
-      } catch (primaryError) {
-        if (primaryError?.response?.status === 404) {
-          const fallbackRes = await $api.get("/users/profile/me");
-          data = fallbackRes.data;
-        } else {
-          throw primaryError;
-        }
-      }
+      const res = await $api.get("/users/profile/me");
+      const data = res.data;
       const profile = data?.myProfile || data?.profile || data?.user || null;
       if (!profile) throw new Error("Profil topilmadi");
 
@@ -296,7 +286,6 @@ export default function ProfilePage() {
       if (formData.firstName !== profileData?.firstName) payload.firstName = formData.firstName;
       if (formData.lastName !== profileData?.lastName) payload.lastName = formData.lastName;
       if (formData.email !== profileData?.email) payload.email = formData.email;
-      if (formData.phoneNumber !== profileData?.phoneNumber) payload.phoneNumber = formData.phoneNumber;
       if ((formData.gender || "") !== (profileData?.gender || "")) payload.gender = formData.gender;
 
       if (!Object.keys(payload).length) {
@@ -304,47 +293,13 @@ export default function ProfilePage() {
         return;
       }
 
-      const myId = profileData?._id || user?._id || "";
-      let data;
-      try {
-        const res = await $api.patch("/users/update/me", payload);
-        data = res.data;
-      } catch (firstError) {
-        const status = firstError?.response?.status;
-        const backendMessage = String(
-          firstError?.response?.data?.message || firstError?.message || ""
-        ).toLowerCase();
-        const castMeError =
-          backendMessage.includes('cast to objectid failed') &&
-          backendMessage.includes('"me"');
+      const body = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        body.append(key, value ?? "");
+      });
 
-        if (castMeError && myId) {
-          const fallbackRes = await $api.patch(`/users/update/${myId}`, payload);
-          data = fallbackRes.data;
-        } else if (status === 400 || status === 422) {
-          try {
-            const res = await $api.patch("/users/update/me", { v: payload });
-            data = res.data;
-          } catch (secondError) {
-            const secondMessage = String(
-              secondError?.response?.data?.message || secondError?.message || ""
-            ).toLowerCase();
-            const secondCastMeError =
-              secondMessage.includes('cast to objectid failed') &&
-              secondMessage.includes('"me"');
-            if (secondCastMeError && myId) {
-              const fallbackRes = await $api.patch(`/users/update/${myId}`, {
-                v: payload,
-              });
-              data = fallbackRes.data;
-            } else {
-              throw secondError;
-            }
-          }
-        } else {
-          throw firstError;
-        }
-      }
+      const res = await $api.patch("/users/update/me", body);
+      const data = res.data;
       const updated = data?.myProfile || data?.profile || data?.user || data;
       const merged = { ...(profileData || {}), ...(updated || {}), ...payload };
       setProfileData(merged);

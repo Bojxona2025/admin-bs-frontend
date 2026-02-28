@@ -3,6 +3,38 @@ import $api from "../http/api";
 const pickList = (data) =>
   data?.notifications || data?.notificationsAll || data?.data || [];
 
+const pickReadPayload = (item) =>
+  item?.notificationId && typeof item.notificationId === "object"
+    ? item.notificationId
+    : item;
+
+const normalizeNotificationId = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value !== "object") return "";
+  return (
+    value?.notificationId?._id ||
+    value?.notificationId?.id ||
+    (typeof value?.notificationId === "string" ? value.notificationId : "") ||
+    value?._notificationId ||
+    value?._id ||
+    value?.id ||
+    ""
+  );
+};
+
+const isReadItem = (item) =>
+  Boolean(
+    item?.isRead ||
+      item?.read ||
+      item?.is_read ||
+      item?.readAt ||
+      pickReadPayload(item)?.isRead ||
+      pickReadPayload(item)?.read ||
+      pickReadPayload(item)?.is_read ||
+      pickReadPayload(item)?.readAt
+  );
+
 const notificationsApi = {
   async getAll({ page = 1, limit = 10, query = "" } = {}) {
     const { data } = await $api.get("/notifications/all", {
@@ -18,8 +50,12 @@ const notificationsApi = {
     const { data } = await $api.get("/notifications/my", {
       params: { page, limit },
     });
-    const items = pickList(data);
-    const unreadCount = items.filter((item) => !item?.isRead).length;
+    const items = pickList(data).map((item) => ({
+      ...(item || {}),
+      _notificationId: normalizeNotificationId(item),
+      _isRead: isReadItem(item),
+    }));
+    const unreadCount = items.filter((item) => !isReadItem(item)).length;
     return {
       ...data,
       items,
@@ -28,7 +64,11 @@ const notificationsApi = {
   },
 
   async getById(id) {
-    const { data } = await $api.get(`/notifications/get/${id}`);
+    const normalizedId = normalizeNotificationId(id);
+    if (!normalizedId) {
+      throw new Error("Notification ID topilmadi");
+    }
+    const { data } = await $api.get(`/notifications/get/${normalizedId}`);
     return data;
   },
 
@@ -59,4 +99,3 @@ const notificationsApi = {
 };
 
 export default notificationsApi;
-

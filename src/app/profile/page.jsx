@@ -11,6 +11,9 @@ import { useHomeLikes } from "../components/hooks/likes";
 import $api from "../http/api";
 import { useTranslation } from "react-i18next";
 
+const getStoredAccessToken = () =>
+  localStorage.getItem("accessToken") || localStorage.getItem("access_token");
+
 const ProfileClient = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("profile");
@@ -31,12 +34,10 @@ const ProfileClient = () => {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem("accessToken");
+      const token = getStoredAccessToken();
       if (!token) {
         throw new Error("Token mavjud emas");
       }
-
-      $api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       const response = await $api.get("/users/profile/me");
 
@@ -103,12 +104,10 @@ const ProfileClient = () => {
 
   const updateUserProfile = async (updatedData) => {
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = getStoredAccessToken();
       if (!token) {
         throw new Error("Token mavjud emas");
       }
-
-      $api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       const changedFields = {};
 
@@ -167,7 +166,7 @@ const ProfileClient = () => {
     }
 
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = getStoredAccessToken();
       if (!token) {
         throw new Error("Token mavjud emas");
       }
@@ -177,7 +176,6 @@ const ProfileClient = () => {
 
       const response = await $api.patch("/users/update/me", formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
         },
       });
@@ -194,18 +192,17 @@ const ProfileClient = () => {
 
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem("accessToken");
+      const token = getStoredAccessToken();
       if (token) {
-        $api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
         await $api.post("/auth/logout");
       }
     } catch (error) {
       console.error("Logout xatolik:", error);
     } finally {
       localStorage.removeItem("accessToken");
+      localStorage.removeItem("access_token");
       localStorage.removeItem("user");
       localStorage.removeItem("avatar");
-      delete $api.defaults.headers.common["Authorization"];
       window.location.href = "/register";
     }
   };

@@ -1,6 +1,7 @@
 import $api from "../../http/api";
+import emuApi from "../../api/emu.api";
 import { MapModal } from "./map";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,7 +10,8 @@ import {
   Map,
   Eye,
   X,
-  Calculator,
+  Plus,
+  Settings2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
@@ -25,16 +27,68 @@ if (!document.querySelector('script[src*="api-maps.yandex.ru"]')) {
   }
 }
 
-export const EmuIntegrationPage = () => {
+const EMU_TABLE_COLUMNS = [
+  { key: "buyurtmaRaqami", label: "Buyurtma raqami", width: "min-w-[180px]" },
+  { key: "yuboruvchiShahri", label: "Yuboruvchi shahri", width: "min-w-[150px]" },
+  { key: "hisobFakturaRaqami", label: "Hisob-faktura raqami", width: "min-w-[190px]" },
+  { key: "buyurtmaSanasi", label: "Buyurtma sanasi", width: "min-w-[160px]" },
+  { key: "zaborVaqti", label: "Zabor vaqti", width: "min-w-[120px]" },
+  { key: "zaborVaqtiGacha", label: "Zabor vaqti gacha", width: "min-w-[160px]" },
+  {
+    key: "qabulQiluvchiKompaniya",
+    label: "Qabul qiluvchi kompaniya",
+    width: "min-w-[220px]",
+  },
+  {
+    key: "qabulQiluvchiAloqaShaxsi",
+    label: "Qabul qiluvchining aloqa shaxsi",
+    width: "min-w-[220px]",
+  },
+  {
+    key: "qabulQiluvchiShahri",
+    label: "Qabul qiluvchi shahri",
+    width: "min-w-[170px]",
+  },
+  {
+    key: "qabulQiluvchiManzili",
+    label: "Qabul qiluvchining manzili",
+    width: "min-w-[260px]",
+  },
+  {
+    key: "qabulQiluvchiTelefoni",
+    label: "Qabul qiluvchining telefoni",
+    width: "min-w-[180px]",
+  },
+  { key: "holat", label: "Holat", width: "min-w-[150px]" },
+  { key: "vazni", label: "Vazni (kg)", width: "min-w-[110px]" },
+  {
+    key: "etkazibBerishNarxi",
+    label: "Yetkazib berish narxi",
+    width: "min-w-[180px]",
+  },
+  { key: "actions", label: "Amallar", width: "min-w-[120px]" },
+];
+
+const getColumnsStorageKey = (source) => `emu-table-visible-columns:v2:${source}`;
+
+export const EmuIntegrationPage = ({ source = "local" }) => {
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.user);
   const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
   const isSuperAdmin = actorRole === "superadmin";
+  const isLiveSource = source === "live";
+  const actorCompanyId = String(user?.companyId?._id || user?.companyId || "");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
-  const [emuOrdersData, setEmuOrdersData] = useState({});
+  const [emuOrdersData, setEmuOrdersData] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState({
+    totalOrders: 0,
+    totalStatusSummary: {},
+    companies: [],
+  });
+  const [emuMeta, setEmuMeta] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showMap, setShowMap] = useState(false);
@@ -42,20 +96,125 @@ export const EmuIntegrationPage = () => {
     client: "Пусто",
     datefrom: "",
     dateto: "",
-    limit: 50,
+    limit: isLiveSource ? 500 : 100,
     companyId: "",
+    sync: false,
   });
   const [showFilter, setShowFilter] = useState(false);
-  const [showCalculator, setShowCalculator] = useState(false);
-  const [calculatorCompanyId, setCalculatorCompanyId] = useState("");
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [showCreateOrder, setShowCreateOrder] = useState(false);
+  const [regionOptions, setRegionOptions] = useState([]);
+  const [pvzOptions, setPvzOptions] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [loadingRegions, setLoadingRegions] = useState(false);
+  const [loadingPvz, setLoadingPvz] = useState(false);
+  const [calculatingPrice, setCalculatingPrice] = useState(false);
+  const [creatingOrder, setCreatingOrder] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [pricePreview, setPricePreview] = useState(null);
+  const [pvzMapReady, setPvzMapReady] = useState(false);
+  const [pvzMapError, setPvzMapError] = useState("");
+  const pvzMapRef = useRef(null);
+  const pvzMapInstanceRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const tableDragRef = useRef({
+    isDragging: false,
+    startX: 0,
+    startScrollLeft: 0,
+  });
+  const productFetchSeqRef = useRef(0);
+  const columnSettingsRef = useRef(null);
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
+    const defaultKeys = EMU_TABLE_COLUMNS.filter((column) => column.key !== "actions").map(
+      (column) => column.key
+    );
+    try {
+      const saved = localStorage.getItem(getColumnsStorageKey(source));
+      if (!saved) return defaultKeys;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return defaultKeys;
+      const normalized = parsed.filter((key) =>
+        EMU_TABLE_COLUMNS.some((column) => column.key === key && key !== "actions")
+      );
+      return normalized.length ? normalized : defaultKeys;
+    } catch {
+      return defaultKeys;
+    }
+  });
+  const [orderForm, setOrderForm] = useState({
+    companyId: "",
+    senderTown: "Ташкент",
+    senderAddress: "",
+    senderPerson: "",
+    senderPhone: "",
+    receiverRegion: "",
+    receiverTown: "",
+    receiverAddress: "",
+    receiverPerson: "",
+    receiverPhone: "",
+    receiverCompany: "",
+    receiverPvzCode: "",
+    productId: "",
+    variantId: "",
+    productQuantity: 1,
+    weight: 1,
+    service: "1",
+    payType: "CASH",
+    instruction: "",
+    enclosure: "",
+  });
+
+  const toStrictNumber = (value) => {
+    if (value == null) return null;
+    const text = String(value).trim();
+    if (!text) return null;
+    const num = Number(text);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const pickText = (value) => {
+    if (Array.isArray(value)) return pickText(value[0]);
+    if (value == null) return "";
+    if (typeof value === "object") {
+      if (value?._ != null) return String(value._).trim();
+      return "";
+    }
+    return String(value).trim();
+  };
+
+  const getValidCoords = (...candidates) => {
+    for (const candidate of candidates) {
+      const source = candidate?.$ || candidate;
+      const latRaw = source?.lat ?? source?.latitude ?? source?.y ?? source?.Y;
+      const lonRaw = source?.lon ?? source?.lng ?? source?.longitude ?? source?.x ?? source?.X;
+      const lat = toStrictNumber(latRaw);
+      const lon = toStrictNumber(lonRaw);
+      if (lat != null && lon != null) {
+        return { lat, lon };
+      }
+    }
+    return null;
+  };
 
   const getStatusMeta = (rawStatus) => {
     const value = (rawStatus || "").toString().trim();
     const normalized = value.toLowerCase();
 
+    if (normalized.includes("created") || normalized.includes("создан")) {
+      return {
+        label: "Yangi",
+        group: "new",
+        tone: "bg-sky-50 text-sky-700 border-sky-200",
+      };
+    }
+
     if (
       normalized.includes("доставлен") ||
       normalized.includes("yetkaz") ||
+      normalized.includes("complete") ||
+      normalized.includes("completed") ||
       normalized === "done"
     ) {
       return {
@@ -74,13 +233,29 @@ export const EmuIntegrationPage = () => {
     }
 
     if (
+      normalized.includes("accepted") ||
+      normalized.includes("pickupready") ||
+      normalized.includes("delivery") ||
+      normalized.includes("departure") ||
+      normalized.includes("departuring") ||
+      normalized.includes("courierdelivered")
+    ) {
+      return {
+        label: "Jarayonda",
+        group: "processing",
+        tone: "bg-amber-50 text-amber-700 border-amber-200",
+      };
+    }
+
+    if (
       normalized.includes("возврат") ||
       normalized.includes("отмена") ||
+      normalized.includes("cancel") ||
       normalized.includes("не достав") ||
       normalized.includes("failed")
     ) {
       return {
-        label: "Yetkazilmadi / bekor",
+        label: "Bekor qilingan",
         group: "failed",
         tone: "bg-rose-50 text-rose-700 border-rose-200",
       };
@@ -113,6 +288,78 @@ export const EmuIntegrationPage = () => {
     };
   };
 
+  const getStatusDescriptionUz = (rawStatus) => {
+    const normalized = String(rawStatus || "").toLowerCase().trim();
+    if (!normalized) return "Holat ma'lumoti kelmagan";
+    if (normalized.includes("complete") || normalized.includes("completed")) {
+      return "Buyurtma muvaffaqiyatli yakunlangan";
+    }
+    if (normalized.includes("cancel")) {
+      return "Buyurtma bekor qilingan";
+    }
+    if (normalized.includes("failed")) {
+      return "Buyurtma muvaffaqiyatsiz yakunlangan";
+    }
+    if (normalized.includes("processing") || normalized.includes("обработ")) {
+      return "Buyurtma jarayonda";
+    }
+    if (normalized.includes("new") || normalized.includes("нов")) {
+      return "Yangi buyurtma";
+    }
+    return String(rawStatus || "Holat ma'lumoti kelmagan");
+  };
+
+  const parsePvzCoords = (point) => {
+    if (!point) return null;
+    const source =
+      point?.coords?.[0]?.$ ||
+      point?.coords?.$ ||
+      point?.coords?.[0] ||
+      point?.coords ||
+      point;
+    const lat = toStrictNumber(
+      source?.lat ?? source?.latitude ?? source?.y ?? source?.Y
+    );
+    const lon = toStrictNumber(
+      source?.lon ?? source?.lng ?? source?.longitude ?? source?.x ?? source?.X
+    );
+    if (lat == null || lon == null) return null;
+    return { lat, lon };
+  };
+
+  const selectedProduct = useMemo(
+    () => products.find((p) => String(p?._id) === String(orderForm.productId)),
+    [products, orderForm.productId]
+  );
+  const selectedVariant = useMemo(
+    () =>
+      (selectedProduct?.variants || []).find(
+        (v) => String(v?._id) === String(orderForm.variantId)
+      ) || null,
+    [selectedProduct, orderForm.variantId]
+  );
+
+  const pvzWithCoords = useMemo(
+    () =>
+      (pvzOptions || [])
+        .map((point) => ({ point, coords: parsePvzCoords(point) }))
+        .filter((item) => item.coords),
+    [pvzOptions]
+  );
+
+  const visibleColumns = useMemo(
+    () =>
+      EMU_TABLE_COLUMNS.filter(
+        (column) => column.key === "actions" || visibleColumnKeys.includes(column.key)
+      ),
+    [visibleColumnKeys]
+  );
+
+  const columnPickerColumns = useMemo(
+    () => EMU_TABLE_COLUMNS.filter((column) => column.key !== "actions"),
+    []
+  );
+
   useEffect(() => {
     if (isSuperAdmin) {
       fetchCompanies();
@@ -120,26 +367,73 @@ export const EmuIntegrationPage = () => {
   }, [isSuperAdmin]);
 
   useEffect(() => {
-    if (!isSuperAdmin) {
-      setCalculatorCompanyId(String(user?.companyId?._id || user?.companyId || ""));
+    if (isLiveSource && !isSuperAdmin) {
+      navigate("/emu/integration", { replace: true });
     }
-  }, [isSuperAdmin, user]);
+  }, [isLiveSource, isSuperAdmin, navigate]);
+
+  useEffect(() => {
+    const onClickOutside = (event) => {
+      if (!columnSettingsRef.current) return;
+      if (!columnSettingsRef.current.contains(event.target)) {
+        setShowColumnSettings(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        getColumnsStorageKey(source),
+        JSON.stringify(visibleColumnKeys)
+      );
+    } catch {
+      // no-op
+    }
+  }, [visibleColumnKeys, source]);
+
+  useEffect(() => {
+    const defaultKeys = EMU_TABLE_COLUMNS.filter((column) => column.key !== "actions").map(
+      (column) => column.key
+    );
+    try {
+      const saved = localStorage.getItem(getColumnsStorageKey(source));
+      if (!saved) {
+        setVisibleColumnKeys(defaultKeys);
+        return;
+      }
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) {
+        setVisibleColumnKeys(defaultKeys);
+        return;
+      }
+      const normalized = parsed.filter((key) =>
+        EMU_TABLE_COLUMNS.some((column) => column.key === key && key !== "actions")
+      );
+      setVisibleColumnKeys(normalized.length ? normalized : defaultKeys);
+    } catch {
+      setVisibleColumnKeys(defaultKeys);
+    }
+  }, [source]);
+
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    setOrderForm((prev) => ({
+      ...prev,
+      companyId: "",
+    }));
+  }, [isSuperAdmin]);
 
   async function fetchCompanies() {
     try {
-      const endpoints = ["/company/all", "/companies/all", "/company/get/all"];
-      let payload = null;
-
-      for (const endpoint of endpoints) {
-        try {
-          const { data } = await $api.get(endpoint);
-          payload = data;
-          if (payload) break;
-        } catch {
-          // next endpoint
-        }
-      }
-
+      const { data: payload } = await $api.get("/company/all", {
+        params: {
+          page: 1,
+          limit: 100,
+        },
+      });
       const list = payload?.data || payload?.companies || [];
       setCompanies(list);
     } catch {
@@ -147,64 +441,378 @@ export const EmuIntegrationPage = () => {
     }
   }
 
+  async function fetchRegions() {
+    setLoadingRegions(true);
+    try {
+      const data = await emuApi.getRegions();
+      const regions = data?.json?.regionlist?.city || data?.data?.regionlist?.city || [];
+      setRegionOptions(Array.isArray(regions) ? regions : []);
+    } catch {
+      setRegionOptions([]);
+    } finally {
+      setLoadingRegions(false);
+    }
+  }
+
+  async function fetchProducts(selectedCompanyId = orderForm.companyId) {
+    const reqId = ++productFetchSeqRef.current;
+    setLoadingProducts(true);
+    try {
+      if (isSuperAdmin && !selectedCompanyId) {
+        if (reqId === productFetchSeqRef.current) setProducts([]);
+        return;
+      }
+
+      const effectiveCompanyId = isSuperAdmin
+        ? String(selectedCompanyId || "")
+        : String(actorCompanyId || "");
+      const params = { page: 1, limit: 100 };
+      if (effectiveCompanyId) {
+        params.companyId = effectiveCompanyId;
+      }
+      const { data: payload } = await $api.get("/products/get/query", { params });
+      const list =
+        payload?.results ||
+        payload?.productData ||
+        payload?.products ||
+        payload?.data?.results ||
+        payload?.data?.productData ||
+        payload?.data?.products ||
+        payload?.data ||
+        [];
+      const parsedList = Array.isArray(list) ? list : [];
+      const scopedList = effectiveCompanyId
+        ? parsedList.filter(
+            (item) =>
+              String(item?.companyId?._id || item?.companyId || "") ===
+              String(effectiveCompanyId)
+          )
+        : parsedList;
+
+      if (reqId === productFetchSeqRef.current) {
+        setProducts(scopedList);
+      }
+    } catch {
+      if (reqId === productFetchSeqRef.current) {
+        setProducts([]);
+      }
+    } finally {
+      if (reqId === productFetchSeqRef.current) {
+        setLoadingProducts(false);
+      }
+    }
+  }
+
+  const parsePvzList = (payload) =>
+    payload?.data?.pvzlist?.pvz || payload?.json?.pvzlist?.pvz || payload?.pvz || payload?.data || [];
+
+  async function fetchPvzByRegion(regionName) {
+    if (!regionName) {
+      setPvzOptions([]);
+      return;
+    }
+    setLoadingPvz(true);
+    try {
+      const payload =
+        String(regionName) === "UZBEKISTAN"
+          ? await emuApi.getUzbekistanPvz({ page: 1, limit: 200 })
+          : await emuApi.getPvz({ region: regionName });
+      const list = parsePvzList(payload);
+      setPvzOptions(Array.isArray(list) ? list : []);
+    } catch {
+      setPvzOptions([]);
+    } finally {
+      setLoadingPvz(false);
+    }
+  }
+
   async function fetchOrders() {
     try {
-      const params = {
-        done: filterParams.client,
-        datefrom: filterParams.datefrom,
-        dateto: filterParams.dateto,
-        limit: filterParams.limit,
-      };
-      if (isSuperAdmin && filterParams.companyId) {
-        params.companyId = filterParams.companyId;
+      const data = await (isLiveSource ? emuApi.getOrdersLive : emuApi.getOrders)(
+        {
+          done:
+            isLiveSource && filterParams.client === "Пусто"
+              ? undefined
+              : filterParams.client,
+          datefrom: filterParams.datefrom,
+          dateto: filterParams.dateto,
+          limit: filterParams.limit,
+          companyId: filterParams.companyId,
+          sync: filterParams.sync,
+        },
+        { role: actorRole, actorCompanyId }
+      );
+      setEmuOrdersData(Array.isArray(data?.orders) ? data.orders : []);
+      setEmuMeta(data?.emuMeta || null);
+      if (isLiveSource) {
+        setAnalyticsData({
+          totalOrders: Number(data?.totalOrders || data?.orders?.length || 0),
+          totalStatusSummary: data?.statusSummary || {},
+          companies: [],
+        });
+      } else {
+        setAnalyticsData((prev) => ({
+          ...prev,
+          totalOrders: Number(data?.totalOrders || 0),
+          totalStatusSummary: data?.statusSummary || {},
+        }));
       }
-      let { data } = await $api.get(`/emu/get/orders`, { params });
-      setEmuOrdersData(data.orders);
     } catch (error) {
-      setEmuOrdersData({});
+      setEmuOrdersData([]);
+      setEmuMeta(null);
+    }
+  }
+
+  async function fetchAnalytics() {
+    try {
+      const data = await emuApi.getOrdersAnalytics(
+        {
+          done: filterParams.client,
+          datefrom: filterParams.datefrom,
+          dateto: filterParams.dateto,
+          limit: filterParams.limit,
+          companyId: filterParams.companyId,
+        },
+        { role: actorRole, actorCompanyId }
+      );
+
+      setAnalyticsData({
+        totalOrders: Number(data?.totalOrders || 0),
+        totalStatusSummary: data?.totalStatusSummary || {},
+        companies: Array.isArray(data?.companies) ? data.companies : [],
+      });
+    } catch {
+      setAnalyticsData({
+        totalOrders: 0,
+        totalStatusSummary: {},
+        companies: [],
+      });
     }
   }
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+    if (!isLiveSource) {
+      fetchAnalytics();
+    }
+  }, [actorRole, actorCompanyId, isLiveSource]);
+
+  useEffect(() => {
+    if (!showCreateOrder) return;
+    fetchRegions();
+    if (!isSuperAdmin) {
+      fetchProducts(orderForm.companyId);
+    }
+    setCreateError("");
+    setCreateSuccess("");
+    setPricePreview(null);
+  }, [showCreateOrder, isSuperAdmin]);
+
+  useEffect(() => {
+    if (!showCreateOrder || !isSuperAdmin) return;
+    fetchProducts(orderForm.companyId);
+  }, [showCreateOrder, isSuperAdmin, orderForm.companyId]);
+
+  useEffect(() => {
+    if (!showCreateOrder || !pvzMapRef.current) return;
+    if (!pvzWithCoords.length) {
+      setPvzMapReady(false);
+      setPvzMapError("");
+      if (pvzMapInstanceRef.current) {
+        pvzMapInstanceRef.current.destroy();
+        pvzMapInstanceRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setPvzMapReady(false);
+    setPvzMapError("");
+
+    const initMap = () => {
+      if (cancelled || !window.ymaps || !pvzMapRef.current) return;
+      window.ymaps.ready(() => {
+        if (cancelled || !pvzMapRef.current) return;
+
+        if (pvzMapInstanceRef.current) {
+          pvzMapInstanceRef.current.destroy();
+          pvzMapInstanceRef.current = null;
+        }
+
+        const firstCoords = pvzWithCoords[0].coords;
+        const map = new window.ymaps.Map(pvzMapRef.current, {
+          center: [firstCoords.lat, firstCoords.lon],
+          zoom: 9,
+          controls: ["zoomControl"],
+        });
+        pvzMapInstanceRef.current = map;
+
+        const bounds = [];
+        pvzWithCoords.forEach(({ point, coords }) => {
+          const code = String(point?.code?.[0] || "");
+          const town = point?.town?.[0]?._ || "PVZ";
+          const address = point?.address?.[0] || "";
+          const isSelected = String(orderForm.receiverPvzCode || "") === code;
+
+          const placemark = new window.ymaps.Placemark(
+            [coords.lat, coords.lon],
+            {
+              hintContent: `${town} (${code})`,
+              balloonContent: `${town}<br/>${address}`,
+            },
+            { preset: isSelected ? "islands#greenIcon" : "islands#blueIcon" }
+          );
+          placemark.events.add("click", () => handlePvzSelect(code));
+          bounds.push([coords.lat, coords.lon]);
+          map.geoObjects.add(placemark);
+        });
+
+        if (bounds.length > 1) {
+          map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 30 });
+        } else {
+          map.setCenter([firstCoords.lat, firstCoords.lon], 12);
+        }
+
+        setPvzMapReady(true);
+      });
+    };
+
+    if (!window.ymaps) {
+      const key = String(import.meta.env.VITE_YANDEX_MAPS_KEY || "").trim();
+      if (!key) {
+        setPvzMapError("Yandex API kaliti topilmadi");
+        return;
+      }
+      const existing = document.querySelector('script[src*="api-maps.yandex.ru"]');
+      if (existing) {
+        existing.addEventListener("load", initMap, { once: true });
+      } else {
+        const script = document.createElement("script");
+        script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(
+          key
+        )}&lang=uz_UZ`;
+        script.async = true;
+        script.onload = initMap;
+        script.onerror = () => setPvzMapError("Xaritani yuklab bo'lmadi");
+        document.head.appendChild(script);
+      }
+    } else {
+      initMap();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showCreateOrder, pvzWithCoords, orderForm.receiverPvzCode]);
 
   // Transform backend data to display format
-  const transformedData = Object.keys(emuOrdersData).map((key) => {
-    const order = emuOrdersData[key];
+  const transformedData = emuOrdersData.map((order, idx) => {
+    const parsedOrderRaw = order?.emuResponseParsed?.statusreq?.order;
+    const parsedOrder = Array.isArray(parsedOrderRaw)
+      ? parsedOrderRaw[0] || {}
+      : parsedOrderRaw || {};
+    const sender = order?.sender?.[0] || order?.sender || {};
+    const receiver = order?.receiver?.[0] || order?.receiver || {};
+    const parsedSender = parsedOrder?.sender?.[0] || parsedOrder?.sender || {};
+    const parsedReceiver = parsedOrder?.receiver?.[0] || parsedOrder?.receiver || {};
+    const senderResolved = {
+      ...parsedSender,
+      ...sender,
+    };
+    const receiverResolved = {
+      ...parsedReceiver,
+      ...receiver,
+    };
+    const senderTown = pickText(sender?.town);
+    const receiverTown = pickText(receiver?.town);
+    const senderTownResolved = pickText(senderResolved?.town);
+    const receiverTownResolved = pickText(receiverResolved?.town);
+    const receiverCoords = getValidCoords(
+      receiver?.coords?.[0]?.$ || receiver?.coords?.$ || receiver?.coords,
+      parsedReceiver?.coords?.[0]?.$ || parsedReceiver?.coords?.$ || parsedReceiver?.coords,
+      order?.currcoords?.$ || order?.currcoords,
+      parsedOrder?.currcoords?.$ || parsedOrder?.currcoords
+    );
+    const statusObj = order?.status?.[0] || order?.status || {};
+    const parsedStatusObj = parsedOrder?.status?.[0] || parsedOrder?.status || {};
+    const statusTitle =
+      statusObj?.$?.title ||
+      parsedStatusObj?.$?.title ||
+      statusObj?._ ||
+      parsedStatusObj?._ ||
+      order?.status ||
+      "";
+    const orderNo =
+      order?.orderNo ||
+      order?.orderno ||
+      parsedOrder?.orderno ||
+      parsedOrder?.$?.orderno ||
+      order?.$?.orderno ||
+      parsedOrder?.$?.awb ||
+      order?.$?.awb ||
+      "";
+
     return {
-      id: key,
-      buyurtmaRaqami: order.$?.orderno || order.$?.awb || "",
-      yuboruvchiShahri: order.sender?.town?._ || "",
-      hisobFakturaRaqami: order.barcode || order.$?.awb || "",
-      buyurtmaSanasi: order.sender?.date || "",
-      zaborVaqti: order.receiver?.time_min || "",
-      zaborVaqtiGacha: order.receiver?.time_max || "",
-      qabulQiluvchiKompaniya: order.receiver?.company || "",
-      qabulQiluvchiAloqaShaxsi: order.receiver?.person || "",
-      qabulQiluvchiShahri: order.receiver?.town?._ || "",
-      qabulQiluvchiManzili: order.receiver?.address || "",
-      qabulQiluvchiTelefoni: order.receiver?.phone || "",
-      holat: order.status?.$?.title || order.status?._ || "",
-      etkazibBerishHaqiqiySanasi: order.delivereddate || "",
-      etkazibBerishMalumoti: order.deliveredto || "",
-      haqiqiyEtkazibBerishVaqti: order.deliveredtime || "",
-      ustamaTolov: order.inshprice || "0",
-      vazni: order.weight || "0",
-      etkazibBerishNarxi: order.price || "0",
-      jonatmalarTuri: order.type || "",
-      yuboruvchiKompaniya: order.sender?.company || "",
-      yuboruvchiISHO: order.sender?.person || "",
-      yuboruvchiManzili: order.sender?.address || "",
-      shtrixKod: order.barcode || "",
-      yuboruvchiTelefoni: order.sender?.phone || "",
-      tavsif: order.instruction || "",
-      topshiriq: order.enclosure || "",
-      etkazibBerishRejimi: order.service || "",
-      elonQilinganQiymat: order.deliveryprice?.$?.total || "0",
-      joylarSoni: order.quantity || "0",
-      etkazibBerishRejaSanasi: order.receiver?.date || "",
-      coordinates: order.receiver?.coords?.$,
+      id: order?._id || orderNo || String(idx),
+      buyurtmaRaqami: orderNo,
+      yuboruvchiShahri: senderTown || senderTownResolved || order?.senderTown || "",
+      hisobFakturaRaqami:
+        order?.barcode || parsedOrder?.barcode || order?.$?.awb || parsedOrder?.$?.awb || orderNo,
+      buyurtmaSanasi: pickText(sender?.date) || pickText(parsedSender?.date) || order?.createdAt || "",
+      zaborVaqti:
+        pickText(receiver?.time_min) ||
+        pickText(parsedReceiver?.time_min) ||
+        "",
+      zaborVaqtiGacha:
+        pickText(receiver?.time_max) ||
+        pickText(parsedReceiver?.time_max) ||
+        "",
+      qabulQiluvchiKompaniya:
+        pickText(receiver?.company) ||
+        pickText(parsedReceiver?.company) ||
+        "",
+      qabulQiluvchiAloqaShaxsi:
+        pickText(receiver?.person) ||
+        pickText(parsedReceiver?.person) ||
+        "",
+      qabulQiluvchiShahri: receiverTown || receiverTownResolved || order?.receiverTown || "",
+      qabulQiluvchiHududi:
+        pickText(receiver?.area) || pickText(parsedReceiver?.area) || "",
+      qabulQiluvchiManzili:
+        pickText(receiver?.address) ||
+        pickText(parsedReceiver?.address) ||
+        "",
+      qabulQiluvchiTelefoni:
+        pickText(receiver?.phone) ||
+        pickText(parsedReceiver?.phone) ||
+        "",
+      holat: statusTitle || order?.currentStatus || "",
+      etkazibBerishHaqiqiySanasi: order.delivereddate || parsedOrder?.delivereddate || "",
+      etkazibBerishMalumoti: order.deliveredto || parsedOrder?.deliveredto || "",
+      haqiqiyEtkazibBerishVaqti: order.deliveredtime || parsedOrder?.deliveredtime || "",
+      ustamaTolov: order.inshprice || parsedOrder?.inshprice || "0",
+      vazni: order.weight || parsedOrder?.weight || "0",
+      etkazibBerishNarxi: order.price || parsedOrder?.price || "0",
+      jonatmalarTuri: order.type || parsedOrder?.type || "",
+      yuboruvchiKompaniya:
+        pickText(sender?.company) || pickText(parsedSender?.company) || "",
+      yuboruvchiISHO:
+        pickText(sender?.person) || pickText(parsedSender?.person) || "",
+      yuboruvchiManzili:
+        pickText(sender?.address) ||
+        pickText(parsedSender?.address) ||
+        "",
+      shtrixKod: order.barcode || parsedOrder?.barcode || "",
+      yuboruvchiTelefoni:
+        pickText(sender?.phone) || pickText(parsedSender?.phone) || "",
+      tavsif: order.instruction || parsedOrder?.instruction || "",
+      topshiriq: order.enclosure || parsedOrder?.enclosure || "",
+      etkazibBerishRejimi: order.service || parsedOrder?.service || "",
+      elonQilinganQiymat: order.deliveryprice?.$?.total || parsedOrder?.deliveryprice?.$?.total || "0",
+      joylarSoni: order.quantity || parsedOrder?.quantity || "0",
+      etkazibBerishRejaSanasi:
+        pickText(receiver?.date) || pickText(parsedReceiver?.date) || "",
+      coordinates: receiverCoords,
     };
   });
 
@@ -218,48 +826,6 @@ export const EmuIntegrationPage = () => {
     },
     { newCount: 0, processingCount: 0, deliveredCount: 0 }
   );
-
-  const columns = [
-    { key: "buyurtmaRaqami", label: "Buyurtma raqami", width: "w-32" },
-    { key: "yuboruvchiShahri", label: "Yuboruvchi shahri", width: "w-32" },
-    { key: "hisobFakturaRaqami", label: "Hisob-faktura raqami", width: "w-36" },
-    { key: "buyurtmaSanasi", label: "Buyurtma sanasi", width: "w-32" },
-    { key: "zaborVaqti", label: "Zabor vaqti", width: "w-24" },
-    { key: "zaborVaqtiGacha", label: "Zabor vaqti gacha", width: "w-32" },
-    {
-      key: "qabulQiluvchiKompaniya",
-      label: "Qabul qiluvchi kompaniya",
-      width: "w-48",
-    },
-    {
-      key: "qabulQiluvchiAloqaShaxsi",
-      label: "Qabul qiluvchining aloqa shaxsi",
-      width: "w-48",
-    },
-    {
-      key: "qabulQiluvchiShahri",
-      label: "Qabul qiluvchi shahri",
-      width: "w-36",
-    },
-    {
-      key: "qabulQiluvchiManzili",
-      label: "Qabul qiluvchining manzili",
-      width: "w-48",
-    },
-    {
-      key: "qabulQiluvchiTelefoni",
-      label: "Qabul qiluvchining telefoni",
-      width: "w-40",
-    },
-    { key: "holat", label: "Holat", width: "w-24" },
-    { key: "vazni", label: "Vazni (kg)", width: "w-24" },
-    {
-      key: "etkazibBerishNarxi",
-      label: "Yetkazib berish narxi",
-      width: "w-36",
-    },
-    { key: "actions", label: "Amallar", width: "w-32" },
-  ];
 
   // Filter data based on search term
   const filteredData = transformedData.filter((item) =>
@@ -292,6 +858,58 @@ export const EmuIntegrationPage = () => {
     setSelectedOrderIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+  };
+
+  const toggleColumn = (columnKey) => {
+    setVisibleColumnKeys((prev) => {
+      if (prev.includes(columnKey)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((key) => key !== columnKey);
+      }
+      return [...prev, columnKey];
+    });
+  };
+
+  const showAllColumns = () => {
+    setVisibleColumnKeys(columnPickerColumns.map((column) => column.key));
+  };
+
+  const resetColumnsToDefault = () => {
+    setVisibleColumnKeys(
+      EMU_TABLE_COLUMNS.filter((column) => column.key !== "actions").map((column) => column.key)
+    );
+  };
+
+  const handleTableMouseDown = (event) => {
+    const container = tableScrollRef.current;
+    if (!container) return;
+    tableDragRef.current = {
+      isDragging: true,
+      startX: event.pageX - container.offsetLeft,
+      startScrollLeft: container.scrollLeft,
+    };
+    container.classList.add("cursor-grabbing");
+  };
+
+  const handleTableMouseLeave = () => {
+    const container = tableScrollRef.current;
+    tableDragRef.current.isDragging = false;
+    container?.classList.remove("cursor-grabbing");
+  };
+
+  const handleTableMouseUp = () => {
+    const container = tableScrollRef.current;
+    tableDragRef.current.isDragging = false;
+    container?.classList.remove("cursor-grabbing");
+  };
+
+  const handleTableMouseMove = (event) => {
+    const container = tableScrollRef.current;
+    if (!container || !tableDragRef.current.isDragging) return;
+    event.preventDefault();
+    const x = event.pageX - container.offsetLeft;
+    const walk = x - tableDragRef.current.startX;
+    container.scrollLeft = tableDragRef.current.startScrollLeft - walk;
   };
 
   useEffect(() => {
@@ -342,21 +960,225 @@ export const EmuIntegrationPage = () => {
       client: "Пусто",
       datefrom: "",
       dateto: "",
-      limit: 50,
+      limit: isLiveSource ? 500 : 100,
       companyId: "",
+      sync: false,
     });
-    fetchOrders(); // Fetch without filter
+    fetchOrders();
+    if (!isLiveSource) fetchAnalytics();
     setShowFilter(false);
     setCurrentPage(1);
   };
 
   const applyFilter = () => {
-    fetchOrders(filterParams);
+    fetchOrders();
+    if (!isLiveSource) fetchAnalytics();
     setShowFilter(false);
     setCurrentPage(1); // Reset to first page after filtering
   };
 
-  const FilterModal = () => {
+  const handleOrderFormChange = (key, value) => {
+    setOrderForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleProductSelect = (productId) => {
+    const chosen = products.find((p) => String(p?._id) === String(productId));
+    const firstVariantId = chosen?.variants?.[0]?._id || "";
+    setOrderForm((prev) => ({
+      ...prev,
+      productId,
+      variantId: firstVariantId,
+    }));
+  };
+
+  const handleRegionSelect = async (regionName) => {
+    setOrderForm((prev) => ({
+      ...prev,
+      receiverRegion: regionName,
+      receiverPvzCode: "",
+      receiverTown: "",
+      receiverAddress: "",
+    }));
+    await fetchPvzByRegion(regionName);
+  };
+
+  const handlePvzSelect = (pvzCode) => {
+    const chosen = (pvzOptions || []).find((point) => String(point?.code?.[0] || "") === String(pvzCode));
+    if (!chosen) {
+      setOrderForm((prev) => ({ ...prev, receiverPvzCode: pvzCode }));
+      return;
+    }
+    const town = chosen?.town?.[0]?._ || chosen?.town?.[0]?.$?.regionname || "";
+    const address = chosen?.address?.[0] || "";
+    setOrderForm((prev) => ({
+      ...prev,
+      receiverPvzCode: pvzCode,
+      receiverTown: prev.receiverTown || town,
+      receiverAddress: prev.receiverAddress || address,
+    }));
+  };
+
+  const calculateOrderPrice = async () => {
+    setCreateError("");
+    setCalculatingPrice(true);
+    try {
+      const payload = {
+        senderTown: orderForm.senderTown || "Ташкент",
+        senderAddress: orderForm.senderAddress || "Tashkent",
+        receiverTown: orderForm.receiverTown || orderForm.receiverRegion || "Tashkent",
+        receiverAddress: orderForm.receiverAddress || "Tashkent",
+        receiverPvz: orderForm.receiverPvzCode || undefined,
+        weight: Math.max(1, Number(orderForm.weight) || 1),
+        service: orderForm.service || "1",
+        payType: orderForm.payType || "CASH",
+      };
+      const result = await emuApi.calculateDelivery(payload);
+      const calc = result?.data?.calculator?.calc || result?.calculator?.calc || null;
+      const price =
+        calc?.$?.price ||
+        calc?.price ||
+        result?.price ||
+        result?.cost ||
+        result?.deliveryPrice ||
+        0;
+      setPricePreview(Number(price) || 0);
+    } catch (error) {
+      setCreateError(
+        error?.response?.data?.message || error?.response?.data?.msg || "Narxni hisoblashda xatolik"
+      );
+      setPricePreview(null);
+    } finally {
+      setCalculatingPrice(false);
+    }
+  };
+
+  const submitCreateOrder = async () => {
+    setCreateError("");
+    setCreateSuccess("");
+    if (!orderForm.receiverPhone || !orderForm.receiverPerson || !orderForm.receiverAddress) {
+      setCreateError("Qabul qiluvchi: telefon, ism va manzil majburiy");
+      return;
+    }
+    if (!orderForm.productId) {
+      setCreateError("Mahsulot tanlanishi majburiy");
+      return;
+    }
+
+    setCreatingOrder(true);
+    try {
+      const receiverPvz = (pvzOptions || []).find(
+        (point) => String(point?.code?.[0] || "") === String(orderForm.receiverPvzCode || "")
+      );
+      const receiverCoords = parsePvzCoords(receiverPvz);
+      const itemName =
+        selectedProduct?.name ||
+        selectedProduct?.productName ||
+        selectedProduct?.name_ru ||
+        "Mahsulot";
+      const itemQuantity = Math.max(1, Number(orderForm.productQuantity) || 1);
+      const itemMass = Math.max(1, Number(orderForm.weight) || 1);
+      const itemPrice = Number(
+        selectedVariant?.discountedPrice ??
+          selectedVariant?.price ??
+          selectedProduct?.variants?.[0]?.discountedPrice ??
+          selectedProduct?.variants?.[0]?.price ??
+          0
+      );
+      const orderNo = `ORD-${Date.now()}`;
+      const today = new Date().toISOString().slice(0, 10);
+      const items = [
+        {
+          name: itemName,
+          quantity: itemQuantity,
+          mass: itemMass,
+          retprice: Number.isFinite(itemPrice) ? itemPrice : 0,
+        },
+      ];
+
+      if (!items.length) {
+        setCreateError("Kamida bitta item yuborilishi kerak");
+        return;
+      }
+
+      const payload = {
+        orderNo,
+        paytype: orderForm.payType || "CASH",
+        service: orderForm.service || "1",
+        type: "1",
+        weight: itemMass,
+        senderTown: orderForm.senderTown || "Ташкент",
+        senderAddress: orderForm.senderAddress || "Tashkent",
+        sender: {
+          company:
+            companies.find((c) => String(c._id) === String(orderForm.companyId))?.name ||
+            "Default Company",
+          town: orderForm.senderTown || "Ташкент",
+          address: orderForm.senderAddress || "Tashkent",
+          person: orderForm.senderPerson || "Sender",
+          phone: orderForm.senderPhone || "+998900000000",
+          date: today,
+          time_min: "09:00",
+          time_max: "18:00",
+        },
+        receiver: {
+          town: orderForm.receiverTown || orderForm.receiverRegion || "",
+          address: orderForm.receiverAddress,
+          person: orderForm.receiverPerson,
+          phone: orderForm.receiverPhone,
+          company: orderForm.receiverCompany || "",
+          receiverPvz: orderForm.receiverPvzCode || undefined,
+          lat: receiverCoords?.lat != null ? String(receiverCoords.lat) : undefined,
+          lon: receiverCoords?.lon != null ? String(receiverCoords.lon) : undefined,
+          country: "UZ",
+        },
+        receiverTown: orderForm.receiverTown || orderForm.receiverRegion || "",
+        receiverAddress: orderForm.receiverAddress,
+        receiverPhone: orderForm.receiverPhone,
+        receiverPerson: orderForm.receiverPerson,
+        receiverCompany: orderForm.receiverCompany || "",
+        receiverPvz: orderForm.receiverPvzCode || undefined,
+        receiverLat: receiverCoords?.lat,
+        receiverLon: receiverCoords?.lon,
+        quantity: itemQuantity,
+        payType: orderForm.payType || "CASH",
+        instruction: orderForm.instruction || "",
+        enclosure: orderForm.enclosure || "",
+        items,
+        products: [
+          {
+            productId: orderForm.productId,
+            variantId: orderForm.variantId || undefined,
+            productQuantity: itemQuantity,
+          },
+        ],
+        location: {
+          la: receiverCoords?.lat != null ? String(receiverCoords.lat) : undefined,
+          lo: receiverCoords?.lon != null ? String(receiverCoords.lon) : undefined,
+          lat: receiverCoords?.lat,
+          lon: receiverCoords?.lon,
+          address: orderForm.receiverAddress,
+        },
+        companyId: isSuperAdmin ? orderForm.companyId || undefined : undefined,
+      };
+
+      await emuApi.createExpressOrder(payload, { role: actorRole, actorCompanyId });
+      setCreateSuccess("Buyurtma EMU ga yuborildi");
+      fetchOrders();
+      if (!isLiveSource) fetchAnalytics();
+      setShowCreateOrder(false);
+    } catch (error) {
+      setCreateError(
+        error?.response?.data?.message ||
+          error?.response?.data?.msg ||
+          error?.message ||
+          "Buyurtma yaratishda xatolik"
+      );
+    } finally {
+      setCreatingOrder(false);
+    }
+  };
+
+  const renderFilterModal = () => {
     if (!showFilter) return null;
 
     return (
@@ -377,7 +1199,7 @@ export const EmuIntegrationPage = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Client ID
+                Holat filtri
               </label>
               <select
                 name=""
@@ -443,10 +1265,11 @@ export const EmuIntegrationPage = () => {
                 <option value={50}>50</option>
                 <option value={100}>100</option>
                 <option value={200}>200</option>
+                <option value={500}>500</option>
               </select>
             </div>
 
-            {isSuperAdmin && (
+            {isSuperAdmin && !isLiveSource && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Kompaniya
@@ -466,6 +1289,20 @@ export const EmuIntegrationPage = () => {
                   ))}
                 </select>
               </div>
+            )}
+
+            {isLiveSource && (
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(filterParams.sync)}
+                  onChange={(e) =>
+                    setFilterParams({ ...filterParams, sync: e.target.checked })
+                  }
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                Jonli natijani lokal bazaga sinxronlash
+              </label>
             )}
           </div>
 
@@ -488,68 +1325,261 @@ export const EmuIntegrationPage = () => {
     );
   };
 
-  const CalculatorModal = () => {
-    if (!showCalculator) return null;
-
-    const effectiveCompanyId = isSuperAdmin
-      ? calculatorCompanyId
-      : String(user?.companyId?._id || user?.companyId || "");
-    const calculatorSrc = effectiveCompanyId
-      ? `https://home.courierexe.ru/245/calculator?companyId=${encodeURIComponent(
-          effectiveCompanyId
-        )}`
-      : "https://home.courierexe.ru/245/calculator";
+  const renderCreateOrderModal = () => {
+    if (!showCreateOrder) return null;
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-        <div className="w-full max-w-6xl bg-white rounded-2xl border border-emerald-100 shadow-2xl overflow-hidden">
+        <div className="w-full max-w-4xl bg-white rounded-2xl border border-emerald-100 shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
-            <button
-              onClick={() => setShowCalculator(false)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span className="text-sm font-medium">Orqaga</span>
-            </button>
             <h3 className="text-sm sm:text-base font-semibold text-slate-800">
-              Yetkazib berish kalkulyatori
+              EMU buyurtma yaratish
             </h3>
             <button
-              onClick={() => setShowCalculator(false)}
+              onClick={() => setShowCreateOrder(false)}
               className="p-2 rounded-lg hover:bg-slate-200 text-slate-500 cursor-pointer"
-              title="Yopish"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {isSuperAdmin && (
-            <div className="px-4 py-3 border-b border-slate-200 bg-white">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Kompaniya tanlang
-              </label>
-              <select
-                value={calculatorCompanyId}
-                onChange={(e) => setCalculatorCompanyId(e.target.value)}
-                className="w-full max-w-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-              >
-                <option value="">Kompaniya tanlang</option>
-                {companies.map((company) => (
-                  <option key={company._id} value={company._id}>
-                    {company.name || company.company_name || company._id}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="p-4 space-y-4 max-h-[75vh] overflow-auto">
+            {createError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
+                {createError}
+              </div>
+            )}
+            {createSuccess && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">
+                {createSuccess}
+              </div>
+            )}
 
-          <iframe
-            id="emu-calculator-frame"
-            src={calculatorSrc}
-            title="Delivery Calculator"
-            className="w-full h-[70vh] border-none block"
-            scrolling="auto"
-          />
+            {isSuperAdmin && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kompaniya</label>
+                <select
+                  value={orderForm.companyId}
+                  onChange={(e) =>
+                    setOrderForm((prev) => ({
+                      ...prev,
+                      companyId: e.target.value,
+                      productId: "",
+                      variantId: "",
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="">Kompaniyani tanlang</option>
+                  {companies.map((company) => (
+                    <option key={company._id} value={company._id}>
+                      {company.name || company.company_name || company._id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Mahsulot</label>
+                <select
+                  value={orderForm.productId}
+                  onChange={(e) => handleProductSelect(e.target.value)}
+                  disabled={loadingProducts || (isSuperAdmin && !orderForm.companyId)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="">
+                    {loadingProducts
+                      ? "Yuklanmoqda..."
+                      : isSuperAdmin && !orderForm.companyId
+                      ? "Avval kompaniya tanlang"
+                      : "Mahsulot tanlang"}
+                  </option>
+                  {products.map((product) => (
+                    <option key={product._id} value={product._id}>
+                      {product.name || product.productName || product._id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Variant</label>
+                <select
+                  value={orderForm.variantId}
+                  onChange={(e) => handleOrderFormChange("variantId", e.target.value)}
+                  disabled={!selectedProduct}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="">Variant tanlang (ixtiyoriy)</option>
+                  {(selectedProduct?.variants || []).map((variant) => (
+                    <option key={variant._id} value={variant._id}>
+                      {variant?.unitValue || variant?.unit || variant?.color || variant?._id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Yuboruvchi shahar</label>
+                <input
+                  value={orderForm.senderTown}
+                  onChange={(e) => handleOrderFormChange("senderTown", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Yuboruvchi manzil</label>
+                <input
+                  value={orderForm.senderAddress}
+                  onChange={(e) => handleOrderFormChange("senderAddress", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Qabul qiluvchi region</label>
+                <select
+                  value={orderForm.receiverRegion}
+                  onChange={(e) => handleRegionSelect(e.target.value)}
+                  disabled={loadingRegions}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="">{loadingRegions ? "Yuklanmoqda..." : "Region tanlang"}</option>
+                  {regionOptions.map((region, idx) => {
+                    const name = region?.name?.[0] || region?.name || "";
+                    return (
+                      <option key={`${name}-${idx}`} value={name}>
+                        {name}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">PVZ</label>
+                <select
+                  value={orderForm.receiverPvzCode}
+                  onChange={(e) => handlePvzSelect(e.target.value)}
+                  disabled={loadingPvz || !orderForm.receiverRegion}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="">{loadingPvz ? "Yuklanmoqda..." : "PVZ tanlang"}</option>
+                  {pvzOptions.map((point, idx) => {
+                    const code = point?.code?.[0] || "";
+                    const title = `${point?.town?.[0]?._ || ""} - ${point?.address?.[0] || code}`;
+                    return (
+                      <option key={`${code}-${idx}`} value={code}>
+                        {title}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Qabul qiluvchi ism</label>
+                <input
+                  value={orderForm.receiverPerson}
+                  onChange={(e) => handleOrderFormChange("receiverPerson", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Qabul qiluvchi telefon</label>
+                <input
+                  value={orderForm.receiverPhone}
+                  onChange={(e) => handleOrderFormChange("receiverPhone", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Qabul qiluvchi manzil</label>
+                <input
+                  value={orderForm.receiverAddress}
+                  onChange={(e) => handleOrderFormChange("receiverAddress", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Vazn (kg)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={orderForm.weight}
+                  onChange={(e) => handleOrderFormChange("weight", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Miqdor</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={orderForm.productQuantity}
+                  onChange={(e) => handleOrderFormChange("productQuantity", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">To'lov turi</label>
+                <select
+                  value={orderForm.payType}
+                  onChange={(e) => handleOrderFormChange("payType", e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="CASH">Naqd</option>
+                  <option value="CARD">Karta</option>
+                </select>
+              </div>
+            </div>
+
+            {Boolean(orderForm.receiverRegion) && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                <div className="mb-2 text-sm font-medium text-emerald-800">PVZ xaritasi</div>
+                {pvzWithCoords.length > 0 ? (
+                  <>
+                    <div
+                      ref={pvzMapRef}
+                      className={`w-full rounded-lg border border-emerald-100 bg-white overflow-hidden ${
+                        pvzMapReady ? "block h-56" : "hidden h-0"
+                      }`}
+                    />
+                    {!pvzMapReady && !pvzMapError && (
+                      <p className="mt-2 text-xs text-slate-500">Xarita yuklanmoqda...</p>
+                    )}
+                    {pvzMapError && (
+                      <p className="mt-2 text-xs text-rose-600">{pvzMapError}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-600">
+                    Tanlangan regionda koordinatali PVZ topilmadi.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {pricePreview != null && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 text-sky-800 px-3 py-2 text-sm">
+                Yetkazib berish narxi: <span className="font-semibold">{pricePreview}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+            <button
+              onClick={calculateOrderPrice}
+              disabled={calculatingPrice}
+              className="px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-60 cursor-pointer"
+            >
+              {calculatingPrice ? "Hisoblanmoqda..." : "Narxni hisoblash"}
+            </button>
+            <button
+              onClick={submitCreateOrder}
+              disabled={creatingOrder}
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+            >
+              {creatingOrder ? "Yuborilmoqda..." : "EMU buyurtma yaratish"}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -558,35 +1588,70 @@ export const EmuIntegrationPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50/40 to-slate-50">
       {/* Header Section */}
-      <FilterModal />
-      <CalculatorModal />
+      {renderFilterModal()}
+      {renderCreateOrderModal()}
       <div className="bg-white/85 border-b border-emerald-100 py-4 backdrop-blur-md sticky top-0 z-20">
-        <div className="">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">
-              EMU Yetkazib berish jadvali
-            </h1>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => {
-                  setShowFilter(!showFilter);
-                }}
-                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer transition-all shadow-sm hover:shadow-md"
-              >
-                <Filter className="w-4 h-4" />
-                <span>Filter</span>
-              </button>
-              <button
-                onClick={() => {
-                  if (isSuperAdmin && !calculatorCompanyId) {
-                    setCalculatorCompanyId(companies?.[0]?._id || "");
+        <div className="rounded-2xl border border-emerald-100/80 bg-gradient-to-r from-white to-emerald-50/40 px-4 py-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {isLiveSource
+                    ? "EMU jonli buyurtmalar"
+                    : isSuperAdmin
+                    ? "EMU buyurtmalar jadvali"
+                    : "EMU buyurtmalari"}
+                </h1>
+                {(isLiveSource || isSuperAdmin) && (
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {isLiveSource ? "Serverdan jonli" : "Mahalliy baza"}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                {isLiveSource
+                  ? "Ma'lumotlar EMU serveridan bevosita olinadi."
+                  : isSuperAdmin
+                  ? "Ma'lumotlar ichki bazada saqlangan buyurtmalardan olinadi."
+                  : "Ma'lumotlar sizning kompaniyangiz buyurtmalaridan olinadi."}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {isSuperAdmin && (
+                <button
+                  onClick={() =>
+                    navigate(isLiveSource ? "/emu/integration" : "/emu/integration/live")
                   }
-                  setShowCalculator(true);
-                }}
-                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 cursor-pointer transition-all shadow-sm hover:shadow-md"
-              >
-                <Calculator className="w-4 h-6" />
-              </button>
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                  title={isLiveSource ? "Mahalliy sahifaga o'tish" : "Jonli sahifaga o'tish"}
+                >
+                  <span>{isLiveSource ? "Mahalliy" : "Jonli"}</span>
+                </button>
+              )}
+              {!isLiveSource && isSuperAdmin && (
+                <>
+                  <button
+                    onClick={() => setShowCreateOrder(true)}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Yangi buyurtma</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowFilter(!showFilter);
+                    }}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                  >
+                    <Filter className="w-4 h-4" />
+                    <span>Filtr</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -600,7 +1665,7 @@ export const EmuIntegrationPage = () => {
               Jami buyurtmalar
             </h3>
             <p className="text-3xl font-semibold text-slate-900 mt-1">
-              {Object.keys(emuOrdersData).length}
+              {analyticsData.totalOrders || transformedData.length}
             </p>
           </div>
           <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm hover:shadow-md transition-all">
@@ -618,15 +1683,72 @@ export const EmuIntegrationPage = () => {
           <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm hover:shadow-md transition-all">
             <h3 className="text-sm font-medium text-slate-500">Yetkazilgan</h3>
             <p className="text-3xl font-semibold text-emerald-600 mt-1">
-              {statusStats.deliveredCount}
+              {Number(
+                analyticsData?.totalStatusSummary?.DELIVERED ||
+                  analyticsData?.totalStatusSummary?.delivered ||
+                  statusStats.deliveredCount
+              )}
             </p>
           </div>
         </div>
 
         {/* Table Container */}
-        <div className="bg-white shadow-sm border border-emerald-100 overflow-hidden rounded-2xl">
-          <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="w-full">
+        <div className="bg-white shadow-sm border border-emerald-100 overflow-visible rounded-2xl">
+          <div className="flex justify-end p-3 border-b border-emerald-100 bg-white relative">
+            <div ref={columnSettingsRef} className="relative">
+              <button
+                onClick={() => setShowColumnSettings((prev) => !prev)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
+                title="Ustunlarni sozlash"
+              >
+                <Settings2 className="w-4 h-4" />
+                <span className="text-sm font-medium">Ustunlar</span>
+              </button>
+              {showColumnSettings && (
+                <div className="absolute right-0 mt-2 w-[520px] max-w-[92vw] rounded-xl border border-slate-200 bg-white shadow-xl z-20 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-slate-800">Ko'rinadigan ustunlar</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={showAllColumns}
+                        className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 cursor-pointer"
+                      >
+                        Barchasi
+                      </button>
+                      <button
+                        onClick={resetColumnsToDefault}
+                        className="px-2 py-1 rounded border border-slate-200 bg-slate-50 text-slate-700 text-xs font-medium hover:bg-slate-100 cursor-pointer"
+                      >
+                        Standart
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    {columnPickerColumns.map((column) => (
+                      <label key={column.key} className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={visibleColumnKeys.includes(column.key)}
+                          onChange={() => toggleColumn(column.key)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>{column.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div
+            ref={tableScrollRef}
+            className="overflow-x-auto max-h-[calc(100vh-300px)] cursor-grab select-none"
+            onMouseDown={handleTableMouseDown}
+            onMouseLeave={handleTableMouseLeave}
+            onMouseUp={handleTableMouseUp}
+            onMouseMove={handleTableMouseMove}
+          >
+            <table className="w-max min-w-full">
               {/* Sticky Header */}
               <thead className="bg-gradient-to-r from-emerald-50 to-teal-50 sticky top-0 z-10">
                 <tr>
@@ -638,10 +1760,10 @@ export const EmuIntegrationPage = () => {
                       onChange={toggleSelectAllCurrentPage}
                     />
                   </th>
-                  {columns.map((column) => (
+                  {visibleColumns.map((column) => (
                     <th
                       key={column.key}
-                      className={`${column.width} px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider border-r border-emerald-100 last:border-r-0`}
+                      className={`${column.width} px-3 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider border-r border-emerald-100 last:border-r-0 whitespace-nowrap align-top`}
                     >
                       {column.label}
                     </th>
@@ -664,37 +1786,52 @@ export const EmuIntegrationPage = () => {
                         onChange={() => toggleSelectOrder(item.id)}
                       />
                     </td>
-                    {columns.map((column) => (
+                    {visibleColumns.map((column) => (
                       <td
                         key={column.key}
-                        className={`${column.width} px-4 py-3 text-sm text-slate-800 border-r border-slate-100 last:border-r-0`}
+                        className={`${column.width} px-3 py-3 text-sm text-slate-800 border-r border-slate-100 last:border-r-0 align-top whitespace-nowrap`}
                       >
                         {column.key === "actions" ? (
                           <div className="flex space-x-2">
+                            {(() => {
+                              const canOpenMap = Boolean(
+                                item.coordinates ||
+                                  item.qabulQiluvchiManzili ||
+                                  item.qabulQiluvchiShahri
+                              );
+                              return (
                             <button
                               onClick={() => showOrderOnMap(item)}
-                              disabled={!item.coordinates}
+                              disabled={!canOpenMap}
                               className={`p-1 cursor-pointer ${
-                                item.coordinates
+                                canOpenMap
                                   ? "text-emerald-600 hover:bg-emerald-100"
                                   : "text-gray-400 cursor-not-allowed"
                               }`}
                               title={
-                                item.coordinates
+                                canOpenMap
                                   ? "Xaritada ko'rish"
-                                  : "Koordinatalar mavjud emas"
+                                  : "Manzil ma'lumoti mavjud emas"
                               }
                             >
                               <Map className="w-4 h-4" />
                             </button>
+                              );
+                            })()}
                             <button
                               className="p-1 cursor-pointer text-green-600 hover:bg-green-100"
                               title="Batafsil ko'rish"
                               onClick={() =>
                                 navigate(
                                   `/emu/order/${item.buyurtmaRaqami}${
-                                    isSuperAdmin && filterParams.companyId
-                                      ? `?companyId=${filterParams.companyId}`
+                                    (isSuperAdmin
+                                      ? filterParams.companyId
+                                      : actorCompanyId)
+                                      ? `?companyId=${encodeURIComponent(
+                                          isSuperAdmin
+                                            ? filterParams.companyId
+                                            : actorCompanyId
+                                        )}`
                                       : ""
                                   }`
                                 )
@@ -704,18 +1841,20 @@ export const EmuIntegrationPage = () => {
                             </button>
                           </div>
                         ) : column.key === "holat" ? (
-                          <div className="space-y-1">
-                            <span
-                              className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border ${getStatusMeta(item[column.key]).tone}`}
-                            >
-                              {getStatusMeta(item[column.key]).label}
-                            </span>
-                            <p className="text-[11px] leading-4 text-slate-500 break-words">
-                              {item[column.key] || "Status kelmagan"}
-                            </p>
-                          </div>
+                          (() => {
+                            const meta = getStatusMeta(item[column.key]);
+                            return (
+                              <div>
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border whitespace-nowrap ${meta.tone}`}
+                                >
+                                  {meta.label}
+                                </span>
+                              </div>
+                            );
+                          })()
                         ) : (
-                          <div className="truncate" title={item[column.key]}>
+                          <div className="whitespace-nowrap" title={item[column.key]}>
                             {item[column.key] || "-"}
                           </div>
                         )}

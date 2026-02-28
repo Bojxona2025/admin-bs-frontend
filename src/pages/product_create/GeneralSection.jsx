@@ -128,19 +128,24 @@ export default function GeneralSection({
 
       setSubLoading(true);
       try {
-        const { data } = await $api.get(
-          `/sub/types/get/by/category/${formData.category}`
-        );
+        const url = `/sub/types/get/by/category/${formData.category}`;
+        console.debug("Fetching subcategories:", url, "categoryId=", formData.category);
+        const res = await $api.get(url);
+        const data = res && res.data ? res.data : res;
 
-        if (Array.isArray(data)) {
-          setSubCategoriesList(data);
-        } else if (data && Array.isArray(data.subcategories)) {
-          setSubCategoriesList(data.subcategories);
-        } else if (data && Array.isArray(data.data)) {
-          setSubCategoriesList(data.data);
-        } else {
-          setSubCategoriesList([]);
-        }
+        // Normalize many possible response shapes into an array
+        let list = [];
+        if (Array.isArray(data)) list = data;
+        else if (data && Array.isArray(data.subcategories)) list = data.subcategories;
+        else if (data && Array.isArray(data.subTypes)) list = data.subTypes;
+        else if (data && Array.isArray(data.subtypes)) list = data.subtypes;
+        else if (data && Array.isArray(data.items)) list = data.items;
+        else if (data && Array.isArray(data.data)) list = data.data;
+        else if (data && data.data && Array.isArray(data.data.data)) list = data.data.data;
+        else if (data && Array.isArray(data.result)) list = data.result;
+
+        console.debug("Subcategories response normalized list length:", list.length, { raw: data });
+        setSubCategoriesList(list);
       } catch (err) {
         console.error("Error fetching subcategories:", err);
         setSubCategoriesList([]);

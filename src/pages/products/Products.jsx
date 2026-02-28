@@ -130,6 +130,11 @@ export const InventoryManagement = () => {
     }
   }, [debouncedSearchTerm]);
 
+  useEffect(() => {
+    setProducts((prev) => ({ ...prev, currentPage: 1 }));
+    fetchProducts(1, debouncedSearchTerm);
+  }, [sortBy]);
+
   async function fetchProducts(page = products.currentPage, search = "") {
     try {
       setDataLoad(true);
@@ -139,6 +144,7 @@ export const InventoryManagement = () => {
           name: search,
           limit: rowsPerPage,
           page,
+          sortBy,
         });
         console.log("API javob:", data);
         setProducts({
@@ -153,6 +159,7 @@ export const InventoryManagement = () => {
         const { data } = await productsApi.listAll({
           limit: rowsPerPage,
           page,
+          sortBy,
         });
         console.log("API javob:", data);
         setProducts({
@@ -176,13 +183,30 @@ export const InventoryManagement = () => {
     }
   }
 
+  const extractCompanyId = useCallback((product) => {
+    const raw = product?.companyId ?? product?.company?._id ?? product?.company;
+    if (typeof raw === "string") return raw;
+    if (raw && typeof raw === "object" && typeof raw._id === "string") return raw._id;
+    return "";
+  }, []);
+
+  const getCardStatus = useCallback((product) => {
+    const raw = String(product?.status || "").trim().toLowerCase();
+    if (raw) return raw;
+    const variantRaw = String(product?.variants?.[0]?.saleStatus || "").trim().toLowerCase();
+    return variantRaw;
+  }, []);
+
   const handleStatusUpdate = useCallback(async (productId, newStatus, e) => {
     e.stopPropagation();
 
     try {
-      await productsApi.update(productId, {
-        status: newStatus,
-      });
+      const target = products.productData.find((p) => p._id === productId);
+      const fd = new FormData();
+      fd.append("status", newStatus);
+      const companyId = extractCompanyId(target);
+      if (companyId) fd.append("companyId", companyId);
+      await productsApi.update(productId, fd);
 
       setProducts((prevProducts) => ({
         ...prevProducts,
@@ -198,7 +222,7 @@ export const InventoryManagement = () => {
     }
 
     setActiveDropdown(null);
-  }, []);
+  }, [extractCompanyId, products.productData]);
 
   const toggleDropdown = useCallback((productId, e) => {
     e.stopPropagation();
@@ -369,12 +393,12 @@ export const InventoryManagement = () => {
 
           <div
             className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-              product.variants[0]?.saleStatus === "active"
+              getCardStatus(product) === "active"
                 ? "bg-emerald-100 text-emerald-700 border-emerald-200"
                 : "bg-slate-100 text-slate-700 border-slate-200"
             }`}
           >
-            {product.variants[0]?.saleStatus === "active" ? "Faol" : "Nofaol"}
+            {getCardStatus(product) === "active" ? "Faol" : "Nofaol"}
           </div>
         </div>
       </div>
@@ -471,7 +495,26 @@ export const InventoryManagement = () => {
         </div>
       </div>
     </div>
-  ), [activeDropdown, handleProductClick, handleStatusUpdate, toggleDropdown, viewMode]);
+  ), [activeDropdown, getCardStatus, handleProductClick, handleStatusUpdate, toggleDropdown, viewMode]);
+
+  const sortedProducts = [...(products.productData || [])].sort((a, b) => {
+    if (sortBy === "price") {
+      const aPrice = Number(a?.variants?.[0]?.discountedPrice ?? a?.variants?.[0]?.price ?? 0);
+      const bPrice = Number(b?.variants?.[0]?.discountedPrice ?? b?.variants?.[0]?.price ?? 0);
+      return aPrice - bPrice;
+    }
+    if (sortBy === "rating") {
+      const aRating = Number(a?.variants?.[0]?.averageRating ?? 0);
+      const bRating = Number(b?.variants?.[0]?.averageRating ?? 0);
+      return bRating - aRating;
+    }
+    if (sortBy === "date") {
+      const aDate = new Date(a?.createdAt || 0).getTime();
+      const bDate = new Date(b?.createdAt || 0).getTime();
+      return bDate - aDate;
+    }
+    return String(a?.name || "").localeCompare(String(b?.name || ""), "uz");
+  });
 
   return (
     <div className="bg-slate-50 min-h-[calc(100vh-4rem)] w-full p-3 sm:p-5 lg:p-6">
@@ -575,7 +618,7 @@ export const InventoryManagement = () => {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <button
                 ref={settingsButtonRef}
-                // onClick={handleSettingsClick}
+                onClick={handleSettingsClick}
                 className="flex items-center cursor-pointer gap-2 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-all duration-200 font-semibold text-slate-700 text-sm"
               >
                 <Settings size={15} />
@@ -672,7 +715,7 @@ export const InventoryManagement = () => {
                 : "space-y-4"
             }`}
           >
-            {products.productData?.map((product, index) => (
+            {sortedProducts.map((product, index) => (
               <ProductCard key={product._id} product={product} index={index} />
             ))}
           </div>
@@ -700,8 +743,72 @@ export const InventoryManagement = () => {
             className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
             onClick={() => setShowColumnSettings(false)}
           />
-          <div className="fixed inset-0 flex items-center justify-center z-50">
-            {/* Column settings modal content goes here */}
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
+              <div className="p-5 sm:p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900">
+                    Sahifa Sozlamalari
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnSettings(false)}
+                    className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="mb-5">
+                  <label className="block text-sm font-semibold text-slate-700 mb-3">
+                    Sahifada mahsulotlar soni:
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[6, 12, 18, 24, 30, 36].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          setRowsPerPage(num);
+                          setShowColumnSettings(false);
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all cursor-pointer ${
+                          rowsPerPage === num
+                            ? "bg-emerald-600 text-white border-emerald-600"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-3">
+                    Tartiblash:
+                  </label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-slate-700"
+                  >
+                    <option value="name">Nomi bo'yicha</option>
+                    <option value="price">Narxi bo'yicha</option>
+                    <option value="rating">Reyting bo'yicha</option>
+                    <option value="date">Sana bo'yicha</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowColumnSettings(false)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold cursor-pointer"
+                >
+                  Yopish
+                </button>
+              </div>
+            </div>
           </div>
         </>
       )}

@@ -1,11 +1,12 @@
 import axios from "axios";
-import Logo from "../../assets/Logo.png";
 import { useNavigate } from "react-router-dom";
 import React, { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { clearSessionLock, getSessionLock } from "../../utils/sessionLock";
 
 const DEVICE_ID_KEY = "stable_device_id";
+const AUTH_LOGOUT_REASON_KEY = "auth_logout_reason";
+const BRAND_LOGO = "/images/telegram-cloud-document-2-5352691370182082102.jpg";
 const getStableDeviceId = () => {
   try {
     const existing =
@@ -65,6 +66,16 @@ export default function SkladLogin() {
     general: "",
   });
   const [lockLeftMs, setLockLeftMs] = useState(0);
+  const mapInactiveMessage = (msg) => {
+    const lowered = String(msg || "").toLowerCase();
+    if (lowered === "company is inactive") {
+      return "Kompaniyangiz nofaol. BS MARKET ga murojaat qiling.";
+    }
+    if (lowered === "user is inactive") {
+      return "Akkauntingiz nofaol holatga o'tkazilgan. BS MARKET ga murojaat qiling.";
+    }
+    return "";
+  };
 
   const formatLock = (ms) => {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -73,8 +84,9 @@ export default function SkladLogin() {
     return `${min}:${String(sec).padStart(2, "0")}`;
   };
 
-  // Agar token mavjud bo'lsa, bosh sahifaga yo'naltirish
+  // Agar token mavjud bo'lsa, avval tekshiramiz; nofaol bo'lsa login'da qoldiramiz
   useEffect(() => {
+    let cancelled = false;
     const lock = getSessionLock();
     if (lock.locked) {
       setLockLeftMs(lock.remainingMs);
@@ -83,10 +95,45 @@ export default function SkladLogin() {
     const token =
       localStorage.getItem("accessToken") ||
       localStorage.getItem("access_token");
-    if (token) {
-      navigate("/indicators/general", { replace: true });
-    }
-  }, [navigate]);
+    if (!token) return;
+
+    (async () => {
+      try {
+        await axios.get(`${API_BASE}/users/profile/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+          withCredentials: true,
+        });
+        if (!cancelled) {
+          navigate("/indicators/general", { replace: true });
+        }
+      } catch (error) {
+        const status = Number(error?.response?.status || 0);
+        const backendMsg =
+          error?.response?.data?.message || error?.response?.data?.msg || "";
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user_profile_cache");
+        localStorage.removeItem("user_role");
+        if (!cancelled && (status === 401 || status === 403)) {
+          const friendly = mapInactiveMessage(backendMsg);
+          if (friendly) {
+            setErrors((prev) => ({ ...prev, general: friendly }));
+          }
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [API_BASE, navigate]);
+
+  useEffect(() => {
+    const reason = localStorage.getItem(AUTH_LOGOUT_REASON_KEY) || "";
+    if (!reason) return;
+    setErrors((prev) => ({ ...prev, general: reason }));
+    localStorage.removeItem(AUTH_LOGOUT_REASON_KEY);
+  }, []);
 
   useEffect(() => {
     const syncLock = () => {
@@ -265,28 +312,10 @@ export default function SkladLogin() {
           localStorage.setItem("user_profile_cache", JSON.stringify(cachedProfile));
         }
         try {
-          let profileResponse;
-          try {
-            profileResponse = await axios.get(
-                `${API_BASE}/users/my/profile`,
-                {
-                  headers: { Authorization: `Bearer ${issuedToken}` },
-                  withCredentials: true,
-                }
-              );
-          } catch (primaryError) {
-            if (primaryError?.response?.status === 404) {
-              profileResponse = await axios.get(
-                `${API_BASE}/users/profile/me`,
-                {
-                  headers: { Authorization: `Bearer ${issuedToken}` },
-                  withCredentials: true,
-                }
-              );
-            } else {
-              throw primaryError;
-            }
-          }
+          const profileResponse = await axios.get(`${API_BASE}/users/profile/me`, {
+            headers: { Authorization: `Bearer ${issuedToken}` },
+            withCredentials: true,
+          });
           const liveProfile =
             profileResponse?.data?.myProfile ||
             profileResponse?.data?.profile ||
@@ -297,8 +326,30 @@ export default function SkladLogin() {
             const liveRole = normalizeRole(liveProfile?.role);
             if (liveRole) localStorage.setItem("user_role", liveRole);
           }
-        } catch (_) {
-          // Profil keyin Router ichida ham olinadi.
+        } catch (profileError) {
+          const status = Number(profileError?.response?.status || 0);
+          const backendMsg =
+            profileError?.response?.data?.message ||
+            profileError?.response?.data?.msg ||
+            "";
+          const inactiveMessage = mapInactiveMessage(backendMsg);
+          if (status === 403 && inactiveMessage) {
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("user_profile_cache");
+            localStorage.removeItem("user_role");
+            setErrors((prev) => ({ ...prev, general: inactiveMessage }));
+            return;
+          }
+          if (status === 401) {
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("access_token");
+            setErrors((prev) => ({
+              ...prev,
+              general: "Sessiya tasdiqlanmadi. Qayta kirib ko'ring.",
+            }));
+            return;
+          }
         }
 
         window.location.replace("/indicators/general");
@@ -326,6 +377,12 @@ export default function SkladLogin() {
         setErrors((prev) => ({
           ...prev,
           password: "Login yoki parol noto'g'ri",
+        }));
+      } else if (status === 403) {
+        const inactiveMessage = mapInactiveMessage(serverMsg);
+        setErrors((prev) => ({
+          ...prev,
+          general: inactiveMessage || "Kirishga ruxsat yo'q. BS MARKET ga murojaat qiling.",
         }));
       } else if (status === 429) {
         setErrors((prev) => ({
@@ -501,27 +558,30 @@ export default function SkladLogin() {
       <div className="hidden lg:flex flex-1 bg-gradient-to-br bg-[#249B73] items-center justify-center p-8">
         <div className="max-w-md text-center">
           <div className="bg-white rounded-[3px] p-8 shadow-xl">
-            <div className="flex items-center justify-center mb-6">
-              <span className="text-3xl font-[700] text-[#249B73]">
-                Bojxona-servis
-              </span>
-            </div>
+            
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Davlat daromadiga o'tkazilgan mol-mulkni sotish tizimi
+            <div className="mb-1 flex justify-center">
+              <img
+                src={BRAND_LOGO}
+                alt="BS Market logo"
+                className="w-[220px] h-auto object-contain"
+              />
+            </div>
+            <h2 className="text-3xl font-extrabold tracking-wide text-gray-900 mb-2">
+              BS MARKET
             </h2>
 
-            <div className="mb-6 flex justify-center">
-              <img src={Logo} alt="Bojxona-servis" width={170} />
-            </div>
+            <p className="text-lg font-semibold text-[#249B73] mb-6">
+              BS Market online sotuv platformasi
+            </p>
 
             <a
               target="_blank"
               rel="noreferrer"
-              href="https://bojxonaservis.uz"
+              href="https://bsmarket.uz"
               className="inline-block bg-[#249B73] cursor-pointer text-white px-6 py-3 font-medium hover:bg-[#3abc91] transition-colors"
             >
-              Rasmiy saytga o'tish
+              BS Market saytiga o'tish
             </a>
           </div>
         </div>

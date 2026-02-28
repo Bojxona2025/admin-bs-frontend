@@ -16,7 +16,13 @@ export default function NotificationModal({ open, setOpen }) {
   } = useNotificationsStore();
 
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
-  const getNotificationId = (notification) => notification?.id || notification?._id;
+  const getNotificationId = (notification) =>
+    notification?._notificationId ||
+    notification?.notificationId?._id ||
+    notification?.notificationId?.id ||
+    (typeof notification?.notificationId === "string" ? notification.notificationId : "") ||
+    notification?.id ||
+    notification?._id;
   const isRead = (notification) =>
     Boolean(notification?.read || notification?.readAt || notification?.is_read);
 

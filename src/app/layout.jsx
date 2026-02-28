@@ -14,10 +14,10 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="uz">
       <head>
-        <link rel="icon" type="image/png" href="/images/Logo.png" />
-        <link rel="apple-touch-icon" href="/images/Logo.png" />
+        <link rel="icon" type="image/jpeg" href="/images/telegram-cloud-document-2-5352691370182082102.jpg" />
+        <link rel="apple-touch-icon" href="/images/telegram-cloud-document-2-5352691370182082102.jpg" />
 
-        <title>BS Market | Онлайн магазин в Узбекистане</title>
+        <title>BS MARKET</title>
         <meta
           name="description"
           content="BS Market – крупнейший онлайн-магазин в Ташкенте и Узбекистане. Телефоны, ноутбуки, бытовая техника, одежда, спорттовары и многое другое по выгодным ценам."

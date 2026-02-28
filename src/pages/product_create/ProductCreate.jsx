@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import ImageSection from "./ImageSection";
 import GeneralSection from "./GeneralSection";
 import VariantList from "./VariantList";
 import VariantForm from "./VariantForm";
 import productsApi from "../../http/products";
+import $api from "../../http/api";
 import CatalogPreview from "./CatalogPrevew";
 import { ToastContainer } from "./Toast";
 import ConfirmExitModal from "./ConfirmExitModal";
@@ -97,6 +99,12 @@ export default function CorporateForm() {
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragOverItem, setDragOverItem] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const { user } = useSelector((state) => state.user);
+  const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
+  const isSuperAdmin = actorRole === "superadmin";
+  const actorCompanyId = user?.companyId?._id || user?.companyId || "";
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
 
   const checkHasUnsavedChanges = useCallback(() => {
     const hasFormData = Object.values(formData).some(
@@ -111,6 +119,31 @@ export default function CorporateForm() {
   useEffect(() => {
     setHasUnsavedChanges(checkHasUnsavedChanges());
   }, [formData, images, variants, checkHasUnsavedChanges]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const fetchCompanies = async () => {
+      const endpoints = ["/company/all", "/companies/all", "/company/get/all"];
+      for (const endpoint of endpoints) {
+        try {
+          const { data } = await $api.get(endpoint);
+          const list = data?.data || data?.companies || data || [];
+          setCompanies(list);
+          if (!selectedCompanyId && list?.[0]?._id) setSelectedCompanyId(list[0]._id);
+          return;
+        } catch (err) {
+          // try next endpoint
+        }
+      }
+      setCompanies([]);
+    };
+    fetchCompanies();
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    setSelectedCompanyId(String(actorCompanyId || ""));
+  }, [isSuperAdmin, actorCompanyId]);
 
   usePrompt(hasUnsavedChanges, (location, proceed) => {
     console.log("Navigation intercepted:", location);
@@ -217,6 +250,7 @@ export default function CorporateForm() {
         { key: "event_id", value: productData.event_id },
         { key: "event_number", value: productData.event_number },
         { key: "category", value: productData.category },
+        { key: "companyId", value: productData.companyId },
         { key: "subTypeId", value: productData.subTypeId },
         { key: "metaTitle", value: productData.metaTitle },
         { key: "metaTitle_ru", value: productData.metaTitle_ru },
@@ -239,7 +273,7 @@ export default function CorporateForm() {
       if (productData.variants && productData.variants.length > 0) {
         const variantsForBackend = productData.variants.map(
           (variant, index) => ({
-            color: variant.color || "",
+            color: (variant.color || "").replace(/^#/, ""),
             unit: unitMap[variant.unit] || variant.unit || "Dona",
             price: parseFloat(variant.price) || 0,
             discount: parseFloat(variant.discount) || 0,
@@ -347,6 +381,8 @@ export default function CorporateForm() {
           );
           console.log(`Upload Progress: ${percentCompleted}%`);
         },
+        // Increase timeout for large uploads / backend processing (ms)
+        timeout: 60000,
       });
 
       return response.data;
@@ -373,6 +409,7 @@ export default function CorporateForm() {
       errors.push("Mahsulot nomi (O'zbekcha) majburiy");
     if (!formData.category) errors.push("Kategoriya majburiy");
     if (!formData.subTypeId) errors.push("Subkategoriya majburiy");
+    if (isSuperAdmin && !selectedCompanyId) errors.push("Kompaniya tanlash majburiy");
     if (images.length === 0) errors.push("Kamida bitta asosiy rasm majburiy");
 
     if (variants.length === 0) {
@@ -437,6 +474,7 @@ export default function CorporateForm() {
         event_number: formData.event_number,
         SPIC: formData.SPIC,
         PackageCode: formData.PackageCode,
+        companyId: selectedCompanyId || actorCompanyId,
       };
 
       console.log("Sending product data to API:", productData);
@@ -606,6 +644,25 @@ export default function CorporateForm() {
             >
               Yopish
             </button>
+          </div>
+          <div className="flex items-center">
+            {isSuperAdmin && (
+              <div className="mr-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kompaniya</label>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="px-3 py-2 border border-slate-300 rounded-lg outline-none"
+                >
+                  <option value="">Kompaniya tanlang</option>
+                  {companies.map((company) => (
+                    <option key={company._id || company.id} value={company._id || company.id}>
+                      {company.name || company.title || company.company_name || (company._id || company.id)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -234,7 +234,7 @@ export default function Cart() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Head>
-          <title>Baraka Savdo</title>
+          <title>BS MARKET</title>
           <meta name="description" content="Online shopping platform" />
         </Head>
         <Navbar />
@@ -251,7 +251,7 @@ export default function Cart() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Head>
-        <title>Baraka Savdo - {t("cart.title")}</title>
+        <title>BS MARKET - {t("cart.title")}</title>
         <meta name="description" content="Online shopping platform" />
       </Head>
 

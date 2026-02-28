@@ -1,5 +1,11 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+## Auth/Profile 401 Guide
+
+Other frontend team uchun profile/auth oqimi va `401` troubleshooting hujjati:
+
+- `FRONT_PROFILE_401_GUIDE.md`
+
 ## Getting Started
 
 First, run the development server:

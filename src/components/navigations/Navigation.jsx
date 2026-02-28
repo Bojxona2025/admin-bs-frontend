@@ -10,7 +10,6 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import Logo from "../../assets/Logo.png";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LazyImage from "../image/LazyImage";
 import $api from "../../http/api";
@@ -57,6 +56,7 @@ const clearForcedBlocked = () => {
 };
 const DEVICE_ID_KEY = "stable_device_id";
 const CURRENT_SESSION_ROW_KEY = "current_session_row_id";
+const Logo = "/images/telegram-cloud-document-2-5352691370182082102.jpg";
 
 const menuItems = [
   { icon: "/indicators.svg", label: "Ko'rsatkichlar", link: "/indicators/general" },
@@ -65,6 +65,7 @@ const menuItems = [
   { icon: "/contragents.svg", label: "Foydalanuvchilar", link: "/system/users" },
   { icon: "/procurement.svg", label: "Kompaniyalar", link: "/system/companies" },
   { icon: "/money.svg", label: "Tushumlar", link: "/money/accounts" },
+  { icon: "/retail.svg", label: "To'lovlar", link: "/money/payments" },
   { icon: "/manufacture.svg", label: "EMU buyurtmalar", link: "/emu/integration" },
   { icon: "/bell.svg", label: "Bildirishnomalar", link: "/notifications" },
   { icon: "/ecommerce.svg", label: "Reklama bannerlari", link: "/system/banners" },
@@ -78,6 +79,7 @@ const SEARCH_SHORTCUTS = [
   { type: "bo'lim", title: "Foydalanuvchilar", route: "/system/users", keywords: ["user", "xodim", "admin"] },
   { type: "bo'lim", title: "Kompaniyalar", route: "/system/companies", keywords: ["company", "kompaniya"] },
   { type: "bo'lim", title: "Tushumlar", route: "/money/accounts", keywords: ["tushum", "daromad", "income"] },
+  { type: "bo'lim", title: "To'lovlar", route: "/money/payments", keywords: ["payme", "click", "transaction", "tolov"] },
   { type: "bo'lim", title: "EMU buyurtmalar", route: "/emu/integration", keywords: ["emu", "yetkazib"] },
   { type: "bo'lim", title: "Arxivlar", route: "/archive", keywords: ["arxiv"] },
   { type: "bo'lim", title: "Korzinka", route: "/trash", keywords: ["korzinka", "trash"] },
@@ -227,8 +229,12 @@ export default function Navbar({
     return true;
   });
 
-  const currentActiveLabel =
-    filteredMenuItems.find((item) => location.pathname.startsWith(item.link))?.label || "Boshqaruv paneli";
+  const currentActiveLabel = (() => {
+    const matched = filteredMenuItems.find((item) => location.pathname.startsWith(item.link));
+    if (matched?.label) return matched.label;
+    if (location.pathname.startsWith("/emu/order/")) return "EMU buyurtmalar";
+    return "Boshqaruv paneli";
+  })();
   const showBackButton =
     location.pathname !== "/" && location.pathname !== "/indicators/general";
 
@@ -314,7 +320,16 @@ export default function Navbar({
     if (!isSuperAdminRole(actorRole)) return;
     try {
       const my = await notificationsApi.getMy({ page: 1, limit: 100 });
-      const unread = (my.items || []).filter((item) => !item?.isRead);
+      const unread = (my.items || []).filter(
+        (item) =>
+          !(
+            item?._isRead ||
+            item?.isRead ||
+            item?.read ||
+            item?.is_read ||
+            item?.readAt
+          )
+      );
       if (!unread.length) {
         setNotificationCount(0);
         return;
@@ -322,7 +337,15 @@ export default function Navbar({
 
       await Promise.allSettled(
         unread
-          .map((item) => item?._id)
+          .map(
+            (item) =>
+              item?._notificationId ||
+              item?.notificationId?._id ||
+              item?.notificationId?.id ||
+              (typeof item?.notificationId === "string" ? item.notificationId : "") ||
+              item?._id ||
+              item?.id
+          )
           .filter(Boolean)
           .map((id) => notificationsApi.getById(id))
       );
@@ -534,6 +557,10 @@ export default function Navbar({
 
   useEffect(() => {
     if (location.pathname === "/login") return () => {};
+    const shouldCheckDevices =
+      location.pathname.startsWith("/profile") ||
+      location.pathname.startsWith("/settings");
+    if (!shouldCheckDevices) return () => {};
 
     let stopped = false;
     const checkMySession = async () => {
@@ -694,7 +721,6 @@ export default function Navbar({
     };
 
     checkMySession();
-    const interval = setInterval(checkMySession, 2000);
     const lockTimer = setInterval(() => {
       const updatedLock = getSessionLock();
       if (updatedLock.locked) {
@@ -713,7 +739,6 @@ export default function Navbar({
     window.addEventListener("session:revoked", handleForcedRevoke);
     return () => {
       stopped = true;
-      clearInterval(interval);
       clearInterval(lockTimer);
       window.removeEventListener("session:revoked", handleForcedRevoke);
     };
@@ -726,8 +751,8 @@ export default function Navbar({
     <>
       <div className={`h-16 px-3 border-b border-gray-200 flex items-center ${expanded ? "justify-between" : "justify-center"}`}>
         <div className={`flex items-center gap-3 ${expanded ? "" : "justify-center"}`}>
-          <div className="w-9 h-9 rounded-lg bg-[#0e9f6e] flex items-center justify-center text-white font-bold">
-            <LazyImage src={Logo} alt="logo" className="w-7 h-7" />
+          <div className="w-11 h-11 rounded-full bg-white border border-emerald-200 shadow-sm flex items-center justify-center overflow-hidden">
+            <LazyImage src={Logo} alt="logo" className="w-9 h-9 rounded-full object-cover" />
           </div>
           {expanded && <div className="font-semibold text-gray-900">BS-MARKET</div>}
         </div>

@@ -6,6 +6,7 @@ import Head from "next/head";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import $api from "../http/api";
+import emuApi from "../../api/emu.api";
 import OrderItems from "./pages/OrderItems";
 import PickupPoints from "./pages/PickupPoints";
 import PaymentMethod from "./pages/PaymentMethod";
@@ -111,16 +112,24 @@ export default function Checkout() {
 
       setLoadingPickupPoints(true);
       try {
-        const response = await $api.get("/emu/get/uzbekistan/pvz");
+        const selectedRegionData = regions.find(
+          (region) => region.code[0] === selectedRegion
+        );
+        const regionName = selectedRegionData?.name?.[0] || "Toshkent";
+        const isUzbekistanRegion = selectedRegionData?.name?.[0] === "UZBEKISTAN";
+        const response = isUzbekistanRegion
+          ? await emuApi.getUzbekistanPvz({ page: 1, limit: 200 })
+          : await $api.post("/emu/get/pvz", {
+              region: regionName,
+            });
 
-        if (response.data?.data?.pvzlist?.pvz) {
-          const allPoints = response.data.data.pvzlist.pvz;
-          const selectedRegionData = regions.find(
-            (region) => region.code[0] === selectedRegion
-          );
+        const allPoints = isUzbekistanRegion
+          ? response?.pvz || response?.data || response?.json?.pvzlist?.pvz || []
+          : response.data?.data?.pvzlist?.pvz || response.data?.json?.pvzlist?.pvz || [];
+        if (Array.isArray(allPoints) && allPoints.length > 0) {
 
           if (selectedRegionData) {
-            if (selectedRegionData.name[0] === "UZBEKISTAN") {
+            if (isUzbekistanRegion) {
               setAllPickupPoints(allPoints);
               setPickupPoints(allPoints);
               if (allPoints.length > 0) {
@@ -534,7 +543,7 @@ export default function Checkout() {
     return (
       <div>
         <Head>
-          <title>Order</title>{" "}
+          <title>BS MARKET - Buyurtma</title>{" "}
           <meta name="description" content="Checkout - Baraka savdo" />
         </Head>
         <Navbar />
@@ -551,7 +560,7 @@ export default function Checkout() {
   return (
     <div>
       <Head>
-        <title>{t("checkout.title")}</title>
+        <title>BS MARKET - {t("checkout.title")}</title>
         <meta name="description" content="Checkout - Baraka Savdo" />
       </Head>
 

@@ -10,6 +10,32 @@ import {
 } from "lucide-react";
 import $api from "../../http/api";
 
+const getNotificationId = (item) =>
+  item?.notificationId?._id ||
+  item?.notificationId?.id ||
+  (typeof item?.notificationId === "string" ? item.notificationId : "") ||
+  item?._notificationId ||
+  item?._id ||
+  item?.id ||
+  "";
+
+const getNotificationPayload = (item) =>
+  item?.notificationId && typeof item.notificationId === "object"
+    ? item.notificationId
+    : item;
+
+const isReadNotification = (item) =>
+  Boolean(
+    item?.isRead ||
+      item?.read ||
+      item?.is_read ||
+      item?.readAt ||
+      getNotificationPayload(item)?.isRead ||
+      getNotificationPayload(item)?.read ||
+      getNotificationPayload(item)?.is_read ||
+      getNotificationPayload(item)?.readAt
+  );
+
 const NotificationsDetail = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
@@ -40,11 +66,24 @@ const NotificationsDetail = () => {
     try {
       const { data } = await $api.get(`/notifications/my`);
 
-      setNotifications(data.notifications || []);
+      const rawItems =
+        data?.notifications || data?.notificationsAll || data?.data || [];
+      const prepared = (Array.isArray(rawItems) ? rawItems : []).map((item) => {
+        const payload = getNotificationPayload(item);
+        return {
+          ...payload,
+          _original: item,
+          _normalizedId: getNotificationId(item),
+          isRead: isReadNotification(item),
+        };
+      });
+
+      setNotifications(prepared);
       setPaginationData({
         currentPage: page,
         totalPages: data.totalPages || 1,
-        totalItems: data.totalNotifications || 0,
+        totalItems:
+          data.totalNotifications || data.total || data.count || prepared.length,
       });
     } catch (error) {
       console.error("Notificationlarni olishda xato:", error);
@@ -59,6 +98,36 @@ const NotificationsDetail = () => {
       fetchNotifications();
     }
   }, [userId, rowsPerLimit]);
+
+  useEffect(() => {
+    if (!userId || !notifications.length) return;
+    const target = notifications.find(
+      (item) => String(getNotificationId(item)) === String(userId)
+    );
+    if (!target || isReadNotification(target)) return;
+
+    (async () => {
+      try {
+        await $api.get(`/notifications/get/${userId}`);
+      } catch (_) {
+        // API xato bo'lsa ham UI'da local holatni o'qilgan qilamiz
+      } finally {
+        setNotifications((prev) =>
+          prev.map((item) =>
+            String(getNotificationId(item)) === String(userId)
+              ? {
+                  ...item,
+                  isRead: true,
+                  read: true,
+                  is_read: true,
+                  readAt: item.readAt || new Date().toISOString(),
+                }
+              : item
+          )
+        );
+      }
+    })();
+  }, [userId, notifications]);
 
   const handlePageChange = (pageNumber) => {
     fetchNotifications(pageNumber);
@@ -188,10 +257,10 @@ const NotificationsDetail = () => {
                       <div className="flex items-center space-x-3 mb-2">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            notification.isRead
+                            isReadNotification(notification)
                           )}`}
                         >
-                          {getNotificationStatus(notification.isRead)}
+                          {getNotificationStatus(isReadNotification(notification))}
                         </span>
                         <div className="flex items-center text-sm text-slate-500">
                           <Calendar className="w-4 h-4 mr-1" />
