@@ -928,15 +928,17 @@ export default function Navbar({
                 >
                   Profil
                 </button>
-                <button
-                  onClick={() => {
-                    navigate("/settings");
-                    setShowUserDropdown(false);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
-                >
-                  Sozlamalar
-                </button>
+                {isSuperAdminRole(actorRole) && (
+                  <button
+                    onClick={() => {
+                      navigate("/settings");
+                      setShowUserDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50"
+                  >
+                    Sozlamalar
+                  </button>
+                )}
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"

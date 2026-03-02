@@ -17,12 +17,21 @@ import $api from "../../http/api";
 import { CreateCategoryModal } from "./CreateCategoryModal";
 import { UpdateCategoryModal } from "./UpdateCategoryModal";
 import { CreateSubCategoryModal } from "./CreateSubtypeModal";
+import { UpdateSubCategoryModal } from "./UpdateSubtypeModal";
 import { useSelector } from "react-redux";
 
 export const Categories = () => {
   const { user } = useSelector((state) => state.user);
   const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
   const isSuperAdmin = actorRole === "superadmin";
+  const actorCompanyId = String(user?.companyId?._id || user?.companyId || "");
+  const canManageCategories = [
+    "superadmin",
+    "admin",
+    "employee",
+    "xodim",
+    "companyadmin",
+  ].includes(actorRole);
 
   const API_ORIGIN = (import.meta.env.VITE_BASE_URL || "")
     .replace(/\/api\/?$/i, "")
@@ -85,6 +94,15 @@ export const Categories = () => {
   const [showSubtypesMenu, setShowSubtypesMenu] = useState(null);
   const [subtypesData, setSubtypesData] = useState({});
   const [loadingSubtypes, setLoadingSubtypes] = useState({});
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [selectedUpdateCompanyId, setSelectedUpdateCompanyId] = useState("");
+  const [selectedSubCompanyId, setSelectedSubCompanyId] = useState("");
+  const [selectedUpdateSubCompanyId, setSelectedUpdateSubCompanyId] =
+    useState("");
+  const [isUpdateSubCategoryModalOpen, setIsUpdateSubCategoryModalOpen] =
+    useState(false);
+  const [selectedSubtype, setSelectedSubtype] = useState(null);
 
   const [filters, setFilters] = useState({
     name: "",
@@ -97,6 +115,17 @@ export const Categories = () => {
   useEffect(() => {
     fetchCategories();
   }, [filters]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      fetchCompanies();
+    } else {
+      setSelectedCompanyId(actorCompanyId);
+      setSelectedUpdateCompanyId(actorCompanyId);
+      setSelectedSubCompanyId(actorCompanyId);
+      setSelectedUpdateSubCompanyId(actorCompanyId);
+    }
+  }, [isSuperAdmin, actorCompanyId]);
 
   // Debounced search effect
   useEffect(() => {
@@ -126,8 +155,45 @@ export const Categories = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  async function fetchCompanies() {
+    try {
+      const { data } = await $api.get("/company/all", {
+        params: { page: 1, limit: 300 },
+      });
+      const list = data?.data || data?.companies || data?.items || [];
+      const normalized = Array.isArray(list) ? list : [];
+      setCompanies(normalized);
+      const fallback = String(normalized?.[0]?._id || "");
+      setSelectedCompanyId((prev) => prev || fallback);
+      setSelectedUpdateCompanyId((prev) => prev || fallback);
+      setSelectedSubCompanyId((prev) => prev || fallback);
+      setSelectedUpdateSubCompanyId((prev) => prev || fallback);
+    } catch {
+      setCompanies([]);
+    }
+  }
+
+  const resolveCompanyId = (companyIdForSuperAdmin) => {
+    if (isSuperAdmin) return String(companyIdForSuperAdmin || "").trim();
+    return actorCompanyId;
+  };
+
+  const normalizeSubtypesPayload = (payload) => {
+    const candidates = [
+      payload?.data,
+      payload?.subtypes,
+      payload?.items,
+      payload?.data?.subtypes,
+      payload?.data?.items,
+      payload,
+    ];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate;
+    }
+    return [];
+  };
   const handleDeleteCategory = async (categoryId) => {
-    if (!isSuperAdmin) return;
     try {
       await $api.delete(`/categories/delete/${categoryId}`);
       await fetchCategories();
@@ -178,8 +244,8 @@ export const Categories = () => {
   }
 
   // Fetch subtypes for a specific category
-  const fetchSubtypes = async (categoryId) => {
-    if (subtypesData[categoryId]) {
+  const fetchSubtypes = async (categoryId, force = false) => {
+    if (!force && Array.isArray(subtypesData[categoryId])) {
       // If subtypes already loaded, just show the menu
       setShowSubtypesMenu(categoryId);
       return;
@@ -188,14 +254,17 @@ export const Categories = () => {
     setLoadingSubtypes((prev) => ({ ...prev, [categoryId]: true }));
 
     try {
-      const { data } = await $api.get(
-        `/sub/types/get/by/category/${categoryId}`
-      );
+      const params = {};
+      if (!isSuperAdmin && actorCompanyId) params.companyId = actorCompanyId;
+      const { data } = await $api.get(`/sub/types/get/by/category/${categoryId}`, {
+        params,
+      });
       console.log("Fetched subtypes:", data);
+      const normalizedSubtypes = normalizeSubtypesPayload(data);
 
       setSubtypesData((prev) => ({
         ...prev,
-        [categoryId]: data?.data || [],
+        [categoryId]: normalizedSubtypes,
       }));
 
       setShowSubtypesMenu(categoryId);
@@ -212,9 +281,11 @@ export const Categories = () => {
   };
 
   const handleSaveCategory = async (formData) => {
-    if (!isSuperAdmin) return;
+    const companyId = resolveCompanyId(selectedCompanyId);
+    if (!companyId) throw new Error("companyId required");
     console.log("Kategoriya saqlash:", formData);
     try {
+      formData.append("companyId", companyId);
       const response = await $api.post("/categories/create", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
@@ -232,22 +303,40 @@ export const Categories = () => {
   };
 
   const handleUpdateCategory = async (formData, categoryId) => {
-    if (!isSuperAdmin) return;
+    const companyId = resolveCompanyId(selectedUpdateCompanyId);
+    if (!companyId) throw new Error("companyId required");
     if (!categoryId) {
       console.error("Category ID is missing!");
       throw new Error("Category ID is required for update");
     }
 
     try {
-      const response = await $api.patch(
-        `/categories/update/${categoryId}`,
-        formData,
-        {
+      const hasImage = formData?.category_img instanceof File;
+      if (hasImage) {
+        const payload = new FormData();
+        payload.append("name", String(formData?.name || "").trim());
+        payload.append("name_ru", String(formData?.name_ru || "").trim());
+        payload.append("name_en", String(formData?.name_en || "").trim());
+        payload.append("top", String(Boolean(formData?.top)));
+        payload.append("companyId", companyId);
+        payload.append("category_img", formData.category_img);
+        await $api.patch(`/categories/update/${categoryId}`, payload, {
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type": "multipart/form-data",
           },
-        }
-      );
+        });
+      } else {
+        const { category_img, ...payload } = formData || {};
+        await $api.patch(
+          `/categories/update/${categoryId}`,
+          { ...payload, companyId },
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
       await fetchCategories();
     } catch (error) {
       console.error("Yangilashda xatolik:", error);
@@ -256,24 +345,70 @@ export const Categories = () => {
   };
 
   const handleSaveSubCategory = async (formData, categoryId) => {
-    if (!isSuperAdmin) return;
+    const companyId = resolveCompanyId(selectedSubCompanyId);
+    if (!companyId) throw new Error("companyId required");
     try {
-      const response = await $api.post("/sub/types/create", formData, {
+      const response = await $api.post(
+        "/sub/types/create",
+        { ...formData, companyId },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      console.log("Sub-kategoriya yaratildi:", response.data);
+      // Refresh categories and clear cached subtypes for this category
+      await fetchCategories();
+      const createdSubtype = response?.data?.data;
+      if (createdSubtype && typeof createdSubtype === "object") {
+        setSubtypesData((prev) => {
+          const current = Array.isArray(prev[categoryId]) ? prev[categoryId] : [];
+          return { ...prev, [categoryId]: [createdSubtype, ...current] };
+        });
+      } else {
+        setSubtypesData((prev) => {
+          const updated = { ...prev };
+          delete updated[categoryId];
+          return updated;
+        });
+      }
+      await fetchSubtypes(categoryId, true);
+    } catch (error) {
+      console.error("Sub-kategoriya yaratishda xatolik:", error);
+      throw error;
+    }
+  };
+
+  const handleUpdateSubCategory = async (formData, subtypeId, categoryId) => {
+    const companyId = resolveCompanyId(selectedUpdateSubCompanyId);
+    if (!companyId) throw new Error("companyId required");
+    if (!subtypeId) throw new Error("subtypeId required");
+
+    const payload = { ...formData, companyId };
+    const endpoint = `/sub/types/update/${subtypeId}`;
+    try {
+      await $api.patch(endpoint, payload, {
         headers: {
           "Content-Type": "application/json",
         },
       });
-      console.log("Sub-kategoriya yaratildi:", response.data);
-      // Refresh categories and clear cached subtypes for this category
-      await fetchCategories();
+    } catch {
+      await $api.put(endpoint, payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
+    await fetchCategories();
+    if (categoryId) {
       setSubtypesData((prev) => {
         const updated = { ...prev };
         delete updated[categoryId];
         return updated;
       });
-    } catch (error) {
-      console.error("Sub-kategoriya yaratishda xatolik:", error);
-      throw error;
+      await fetchSubtypes(categoryId, true);
     }
   };
 
@@ -336,15 +471,40 @@ export const Categories = () => {
   };
 
   const handleEdit = (solution) => {
-    if (!isSuperAdmin) return;
+    if (!canManageCategories) return;
+    const categoryCompanyId = String(solution?.companyId?._id || solution?.companyId || "");
+    if (isSuperAdmin) {
+      setSelectedUpdateCompanyId(
+        categoryCompanyId || selectedCompanyId || companies?.[0]?._id || ""
+      );
+    }
     setSelectedCategory(solution);
     setIsUpdateModalOpen(true);
   };
 
   const handleCreateSubCategory = (category) => {
-    if (!isSuperAdmin) return;
+    if (!canManageCategories) return;
+    const categoryCompanyId = String(category?.companyId?._id || category?.companyId || "");
+    if (isSuperAdmin) {
+      setSelectedSubCompanyId(
+        categoryCompanyId || selectedCompanyId || companies?.[0]?._id || ""
+      );
+    }
     setSelectedCategoryForSub(category);
     setIsCreateSubCategoryModalOpen(true);
+  };
+
+  const handleEditSubCategory = (subtype, categoryId, categoryName) => {
+    if (!canManageCategories) return;
+    const subtypeCompanyId = String(subtype?.companyId?._id || subtype?.companyId || "");
+    if (isSuperAdmin) {
+      setSelectedUpdateSubCompanyId(
+        subtypeCompanyId || selectedCompanyId || companies?.[0]?._id || ""
+      );
+    }
+    setSelectedSubtype({ ...subtype, categoryId, categoryName });
+    setIsUpdateSubCategoryModalOpen(true);
+    setShowSubtypesMenu(null);
   };
 
   // Generate page numbers for pagination
@@ -403,7 +563,7 @@ export const Categories = () => {
                 key={subtype._id}
                 className="p-3 hover:bg-gray-50 border-b border-gray-50 last:border-b-0"
               >
-                <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <h5 className="font-medium text-gray-900 text-sm truncate">
                       {subtype.name}
@@ -414,6 +574,14 @@ export const Categories = () => {
                       </p>
                     )}
                   </div>
+                  {canManageCategories && (
+                    <button
+                      onClick={() => handleEditSubCategory(subtype, categoryId, categoryName)}
+                      className="rounded-md border border-emerald-200 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Tahrirlash
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -426,7 +594,7 @@ export const Categories = () => {
           )}
         </div>
 
-        {isSuperAdmin && (
+        {canManageCategories && (
           <div className="p-3 border-t border-gray-100">
             <button
               onClick={() => {
@@ -454,7 +622,7 @@ export const Categories = () => {
               <Info className="w-5 h-5 text-slate-400" />
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
-              {isSuperAdmin && (
+              {canManageCategories && (
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
                   className="flex items-center justify-center cursor-pointer space-x-2 px-4 py-2 bg-[#249B73] text-white rounded-lg hover:bg-[#1f8966] focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200"
@@ -641,7 +809,7 @@ export const Categories = () => {
                       </p>
 
                       {/* Actions */}
-                      {isSuperAdmin ? (
+                      {canManageCategories ? (
                         <div className="grid grid-cols-1 gap-2 mt-auto">
                           <button
                             onClick={() => handleEdit(category)}
@@ -782,13 +950,17 @@ export const Categories = () => {
       )}
 
       <CreateCategoryModal
-        isOpen={isSuperAdmin && isCreateModalOpen}
+        isOpen={canManageCategories && isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSave={handleSaveCategory}
+        companies={companies}
+        isSuperAdmin={isSuperAdmin}
+        selectedCompanyId={selectedCompanyId}
+        onCompanyChange={setSelectedCompanyId}
       />
 
       <UpdateCategoryModal
-        isOpen={isSuperAdmin && isUpdateModalOpen}
+        isOpen={canManageCategories && isUpdateModalOpen}
         onClose={() => {
           setIsUpdateModalOpen(false);
           setSelectedCategory(null);
@@ -799,10 +971,15 @@ export const Categories = () => {
           setIsUpdateModalOpen(false);
           setDeleteConfirmModal({ isOpen: true, category });
         }}
+        companies={companies}
+        isSuperAdmin={isSuperAdmin}
+        selectedCompanyId={selectedUpdateCompanyId}
+        onCompanyChange={setSelectedUpdateCompanyId}
+        imageUrlResolver={toCategoryImageUrl}
       />
 
       <CreateSubCategoryModal
-        isOpen={isSuperAdmin && isCreateSubCategoryModalOpen}
+        isOpen={canManageCategories && isCreateSubCategoryModalOpen}
         onClose={() => {
           setIsCreateSubCategoryModalOpen(false);
           setSelectedCategoryForSub(null);
@@ -810,6 +987,25 @@ export const Categories = () => {
         onSave={handleSaveSubCategory}
         categoryId={selectedCategoryForSub?._id}
         categoryName={selectedCategoryForSub?.name}
+        companies={companies}
+        isSuperAdmin={isSuperAdmin}
+        selectedCompanyId={selectedSubCompanyId}
+        onCompanyChange={setSelectedSubCompanyId}
+      />
+
+      <UpdateSubCategoryModal
+        isOpen={canManageCategories && isUpdateSubCategoryModalOpen}
+        onClose={() => {
+          setIsUpdateSubCategoryModalOpen(false);
+          setSelectedSubtype(null);
+        }}
+        onSave={handleUpdateSubCategory}
+        subtypeData={selectedSubtype}
+        categoryName={selectedSubtype?.categoryName}
+        companies={companies}
+        isSuperAdmin={isSuperAdmin}
+        selectedCompanyId={selectedUpdateSubCompanyId}
+        onCompanyChange={setSelectedUpdateSubCompanyId}
       />
     </div>
   );

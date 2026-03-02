@@ -6,11 +6,7 @@ import {
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
+  Tooltip,
 } from "recharts";
 import {
   RefreshCw,
@@ -56,6 +52,11 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const buttons = ["Hafta", "Oy", "Yil"];
+  const periodMap = {
+    Hafta: "Неделя",
+    Oy: "Месяц",
+    Yil: "Год",
+  };
 
   // Format number function
   const formatNumber = (num) => {
@@ -160,13 +161,6 @@ export default function Dashboard() {
 
   async function fetchOrderStatistics() {
     try {
-      // API parametrini ham o'zbek tiliga moslashtirish
-      const periodMap = {
-        Hafta: "Неделя",
-        Oy: "Месяц",
-        Yil: "Год",
-      };
-
       let { data } = await $api.get(
         `/dashboard/orders/statistics?period=${
           periodMap[selectedPeriod] || selectedPeriod
@@ -285,33 +279,71 @@ export default function Dashboard() {
     return pageNumbers;
   };
 
-  // Chart data generation functions (with Uzbek months)
-  const generateSalesData = () => {
-    if (!orderStatistics?.salesData) return [];
+  const salesChartData = useMemo(() => {
+    if (!Array.isArray(orderStatistics?.salesData)) return [];
 
-    const isYearly = typeof orderStatistics.salesData[0]?._id === "number";
+    const salesData = orderStatistics.salesData;
+    const isYearly = selectedPeriod === "Yil";
 
     if (isYearly) {
       return uzbekMonths.map((month, index) => {
-        const monthData = orderStatistics.salesData.find(
-          (item) => item._id === index + 1
-        );
+        const monthData = salesData.find((item) => Number(item?._id) === index + 1);
         return {
+          key: String(index + 1),
           name: month,
-          value: monthData ? monthData.total : 0,
+          value: Number(monthData?.total || 0),
+          count: Number(monthData?.count || 0),
         };
       });
     }
 
-    return orderStatistics.salesData.map((item) => {
-      const date = new Date(item._id);
-      const formatted = formatDateUzbek(date);
-      return {
-        name: formatted.dayMonth,
-        value: item.total,
-      };
-    });
-  };
+    const mapped = salesData
+      .map((item, index) => {
+        const rawId = item?._id;
+        let parsedDate = null;
+
+        if (typeof rawId === "string" || rawId instanceof Date) {
+          const maybeDate = new Date(rawId);
+          if (!Number.isNaN(maybeDate.getTime())) parsedDate = maybeDate;
+        } else if (rawId && typeof rawId === "object") {
+          const year = Number(rawId.year || rawId.y);
+          const month = Number(rawId.month || rawId.m);
+          const day = Number(rawId.day || rawId.d);
+          if (year && month && day) {
+            const maybeDate = new Date(year, month - 1, day);
+            if (!Number.isNaN(maybeDate.getTime())) parsedDate = maybeDate;
+          }
+        }
+
+        const fallbackLabel = `#${index + 1}`;
+        const formatted = parsedDate ? formatDateUzbek(parsedDate) : null;
+
+        return {
+          key: parsedDate ? parsedDate.toISOString() : fallbackLabel,
+          name: formatted ? formatted.dayMonth : fallbackLabel,
+          value: Number(item?.total || 0),
+          count: Number(item?.count || 0),
+          timestamp: parsedDate ? parsedDate.getTime() : Number.MAX_SAFE_INTEGER + index,
+        };
+      })
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    return mapped;
+  }, [orderStatistics?.salesData, selectedPeriod]);
+
+  const salesSummary = useMemo(() => {
+    const totalRevenue = salesChartData.reduce((sum, item) => sum + item.value, 0);
+    const totalCount = salesChartData.reduce((sum, item) => sum + item.count, 0);
+    const latestPoint = salesChartData[salesChartData.length - 1] || null;
+    const averageCheck = totalCount > 0 ? totalRevenue / totalCount : 0;
+
+    return {
+      totalRevenue,
+      totalCount,
+      latestPoint,
+      averageCheck,
+    };
+  }, [salesChartData]);
 
   const getRoleDistribution = () => {
     if (!userStatistics?.roleBreakdown) return [];
@@ -333,11 +365,7 @@ export default function Dashboard() {
     );
   }
 
-  const todaySales =
-    orderStatistics?.salesData?.[orderStatistics.salesData.length - 1] || {
-      total: 0,
-      count: 0,
-    };
+  const todaySales = salesSummary.latestPoint || { value: 0, count: 0 };
   const roleDistribution = getRoleDistribution();
 
   // Bugungi sana o'zbek tilida
@@ -520,14 +548,14 @@ export default function Dashboard() {
               <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 min-w-[170px]">
                 <div className="text-xs font-medium text-slate-500">Daromad</div>
                 <div className="text-2xl font-bold text-slate-900">
-                  {formatNumber(todaySales.total)}
+                  {formatNumber(todaySales.value)}
                 </div>
                 <div className="text-xs text-slate-500">so'm</div>
               </div>
               <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 min-w-[170px]">
                 <div className="text-xs font-medium text-slate-500">O'rtacha</div>
                 <div className="text-2xl font-bold text-slate-900">
-                  {formatNumber(todaySales.total)}
+                  {formatNumber(Math.round(salesSummary.averageCheck))}
                 </div>
                 <div className="text-xs text-slate-500">solishtirma</div>
               </div>
@@ -535,31 +563,45 @@ export default function Dashboard() {
           </div>
 
           <div className="h-64 rounded-2xl border border-dashed border-emerald-200 bg-gradient-to-b from-emerald-50/40 to-white px-2 py-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={generateSalesData()}>
-                <CartesianGrid strokeDasharray="4 4" stroke="#dbece4" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: "#5f6b7a" }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: "#5f6b7a" }}
-                  tickFormatter={(value) => formatNumber(value)}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#0ea76b"
-                  strokeWidth={3.5}
-                  dot={{ fill: "#0ea76b", strokeWidth: 0, r: 4 }}
-                  activeDot={{ r: 6, fill: "#0b8c59" }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {salesChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={salesChartData}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="#dbece4" />
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: "#5f6b7a" }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: "#5f6b7a" }}
+                    tickFormatter={(value) => formatNumber(value)}
+                  />
+                  <Tooltip
+                    formatter={(value, key) => {
+                      if (key === "value") return [`${formatNumber(value)} so'm`, "Daromad"];
+                      if (key === "count") return [formatNumber(value), "Sotish"];
+                      return [value, key];
+                    }}
+                    labelFormatter={(label) => `Sana: ${label}`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#0ea76b"
+                    strokeWidth={3.5}
+                    dot={{ fill: "#0ea76b", strokeWidth: 0, r: 4 }}
+                    activeDot={{ r: 6, fill: "#0b8c59" }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-sm text-slate-500">
+                Grafik uchun ma'lumot topilmadi
+              </div>
+            )}
           </div>
 
           <div className="mt-6 rounded-2xl border border-emerald-100 bg-slate-50/70 px-5 py-4">

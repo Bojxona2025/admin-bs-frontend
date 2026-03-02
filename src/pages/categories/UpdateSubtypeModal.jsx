@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { X, Languages } from "lucide-react";
 import { autoTranslateFromUzbek } from "../../utils/translation/autoTranslate";
 
-export const CreateSubCategoryModal = ({
+export const UpdateSubCategoryModal = ({
   isOpen,
   onClose,
   onSave,
-  categoryId,
+  subtypeData,
   categoryName,
   companies = [],
   isSuperAdmin = false,
@@ -18,11 +18,11 @@ export const CreateSubCategoryModal = ({
     name_ru: "",
     name_en: "",
   });
-  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAutoTranslating, setIsAutoTranslating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [isAutoTranslating, setIsAutoTranslating] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -39,11 +39,15 @@ export const CreateSubCategoryModal = ({
     };
   }, [isOpen]);
 
-  const resetForm = () => {
-    setFormData({ name: "", name_ru: "", name_en: "" });
+  useEffect(() => {
+    if (!subtypeData) return;
+    setFormData({
+      name: subtypeData.name || "",
+      name_ru: subtypeData.name_ru || "",
+      name_en: subtypeData.name_en || "",
+    });
     setErrors({});
-    setIsAutoTranslating(false);
-  };
+  }, [subtypeData]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -66,11 +70,11 @@ export const CreateSubCategoryModal = ({
     }
   };
 
-  const validateForm = () => {
+  const validate = () => {
     const nextErrors = {};
-    if (!formData.name.trim()) nextErrors.name = "Nom maydoni talab qilinadi";
-    if (!formData.name_ru.trim()) nextErrors.name_ru = "Rus tilida nom talab qilinadi";
-    if (!formData.name_en.trim()) nextErrors.name_en = "Ingliz tilida nom talab qilinadi";
+    if (!formData.name.trim()) nextErrors.name = "Nom (UZ) majburiy";
+    if (!formData.name_ru.trim()) nextErrors.name_ru = "Nom (RU) majburiy";
+    if (!formData.name_en.trim()) nextErrors.name_en = "Nom (EN) majburiy";
     if (isSuperAdmin && !selectedCompanyId) nextErrors.companyId = "Kompaniyani tanlang";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -78,30 +82,23 @@ export const CreateSubCategoryModal = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validate()) return;
+    if (!subtypeData?._id) {
+      setErrors({ submit: "Sub-kategoriya topilmadi" });
+      return;
+    }
 
-    setLoading(true);
+    setIsLoading(true);
     try {
-      const dataToSend = {
-        ...formData,
-        categoryId,
-      };
-      await onSave(dataToSend, categoryId);
-      resetForm();
+      await onSave(formData, subtypeData._id, subtypeData.categoryId || subtypeData.category?._id);
       onClose();
     } catch (error) {
       setErrors({
-        submit:
-          error?.response?.data?.message || "Sub-kategoriya yaratishda xatolik yuz berdi",
+        submit: error?.response?.data?.message || "Sub-kategoriyani yangilashda xatolik",
       });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
-
-  const handleClose = () => {
-    resetForm();
-    onClose();
   };
 
   if (!isVisible) return null;
@@ -112,9 +109,8 @@ export const CreateSubCategoryModal = ({
         className={`absolute inset-0 bg-black/35 transition-opacity duration-200 ${
           isAnimating ? "opacity-100" : "opacity-0"
         }`}
-        onClick={handleClose}
+        onClick={onClose}
       />
-
       <div className="relative z-10 flex min-h-full items-center justify-center p-4">
         <div
           className={`w-full max-w-lg rounded-2xl border border-emerald-100 bg-white shadow-2xl transition-all duration-200 ${
@@ -122,13 +118,12 @@ export const CreateSubCategoryModal = ({
           }`}
         >
           <div className="flex items-center justify-between border-b border-emerald-100 px-5 py-4">
-            <h2 className="text-3xl font-semibold text-slate-900">Sub-kategoriya yaratish</h2>
+            <h2 className="text-3xl font-semibold text-slate-900">Sub-kategoriyani yangilash</h2>
             <button
-              onClick={handleClose}
+              onClick={onClose}
               className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              disabled={loading}
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" />
             </button>
           </div>
 
@@ -173,78 +168,72 @@ export const CreateSubCategoryModal = ({
             </div>
 
             <div>
-              <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-700">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Nom (UZ) <span className="text-red-700">*</span>
               </label>
               <input
                 type="text"
-                id="name"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
                 onBlur={runAutoTranslate}
                 className="w-full rounded-lg border border-emerald-200 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Sub-kategoriya nomini kiriting"
-                disabled={loading}
+                placeholder="Sub-kategoriya nomi"
               />
               {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
             </div>
 
             <div>
-              <label htmlFor="name_ru" className="mb-2 block text-sm font-medium text-slate-700">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Nom (RU) <span className="text-red-700">*</span>
               </label>
               <input
                 type="text"
-                id="name_ru"
                 name="name_ru"
                 value={formData.name_ru}
                 onChange={handleInputChange}
                 className="w-full rounded-lg border border-emerald-200 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="Название подкатегории"
-                disabled={loading}
               />
               {errors.name_ru && <p className="mt-1 text-sm text-red-600">{errors.name_ru}</p>}
             </div>
 
             <div>
-              <label htmlFor="name_en" className="mb-2 block text-sm font-medium text-slate-700">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Nom (EN) <span className="text-red-700">*</span>
               </label>
               <input
                 type="text"
-                id="name_en"
                 name="name_en"
                 value={formData.name_en}
                 onChange={handleInputChange}
                 className="w-full rounded-lg border border-emerald-200 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="Sub-category name"
-                disabled={loading}
               />
               {errors.name_en && <p className="mt-1 text-sm text-red-600">{errors.name_en}</p>}
             </div>
 
             {errors.submit && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="text-sm text-red-600">{errors.submit}</p>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                {errors.submit}
               </div>
             )}
 
             <div className="flex items-center justify-end gap-3 border-t border-emerald-100 bg-slate-50 -mx-5 px-5 py-4 mt-2">
               <button
                 type="button"
-                onClick={handleClose}
+                onClick={onClose}
                 className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                disabled={loading}
+                disabled={isLoading}
               >
                 Bekor qilish
               </button>
               <button
                 type="submit"
                 className="rounded-lg bg-[#249B73] px-4 py-2 text-sm font-medium text-white hover:bg-[#1f8966] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={loading}
+                disabled={isLoading}
               >
-                {loading ? "Yaratilmoqda..." : "Yaratish"}
+                {isLoading ? "Saqlanmoqda..." : "Yangilash"}
               </button>
             </div>
           </form>

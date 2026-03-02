@@ -1,6 +1,14 @@
 import { useEffect } from "react";
 import { X, Save } from "lucide-react";
 
+const getLocationString = (location) => {
+  if (typeof location === "string") return location;
+  if (location && typeof location === "object") {
+    return location.address || location.name || "";
+  }
+  return "";
+};
+
 const UpdateOrderModal = ({
   showUpdateModal,
   setShowUpdateModal,
@@ -9,6 +17,8 @@ const UpdateOrderModal = ({
   handleUpdateOrder,
   isUpdating,
 }) => {
+  const locationAddress = getLocationString(updateData?.location);
+
   // Scrollni bloklash
   useEffect(() => {
     if (showUpdateModal) {
@@ -53,9 +63,12 @@ const UpdateOrderModal = ({
               Yetkazib berish manzili
             </label>
             <textarea
-              value={updateData.location}
+              value={locationAddress}
               onChange={(e) =>
-                setUpdateData({ ...updateData, location: e.target.value })
+                setUpdateData({
+                  ...updateData,
+                  location: e.target.value,
+                })
               }
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
