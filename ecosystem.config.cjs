@@ -6,7 +6,7 @@ module.exports = {
             args: "start -p 3000",
             env: {
                 NODE_ENV: "production",
-                NEXT_PUBLIC_API_URL: "https://bsmarket.uz/api"
+                NEXT_PUBLIC_API_URL: "http://localhost:5342/api"
             },
         },
     ],
