@@ -331,20 +331,6 @@ export default function Dashboard() {
     return mapped;
   }, [orderStatistics?.salesData, selectedPeriod]);
 
-  const salesSummary = useMemo(() => {
-    const totalRevenue = salesChartData.reduce((sum, item) => sum + item.value, 0);
-    const totalCount = salesChartData.reduce((sum, item) => sum + item.count, 0);
-    const latestPoint = salesChartData[salesChartData.length - 1] || null;
-    const averageCheck = totalCount > 0 ? totalRevenue / totalCount : 0;
-
-    return {
-      totalRevenue,
-      totalCount,
-      latestPoint,
-      averageCheck,
-    };
-  }, [salesChartData]);
-
   const getRoleDistribution = () => {
     if (!userStatistics?.roleBreakdown) return [];
 
@@ -365,7 +351,6 @@ export default function Dashboard() {
     );
   }
 
-  const todaySales = salesSummary.latestPoint || { value: 0, count: 0 };
   const roleDistribution = getRoleDistribution();
 
   // Bugungi sana o'zbek tilida
@@ -538,28 +523,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 min-w-[170px]">
-                <div className="text-xs font-medium text-slate-500">Sotish</div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {todaySales.count}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 min-w-[170px]">
-                <div className="text-xs font-medium text-slate-500">Daromad</div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {formatNumber(todaySales.value)}
-                </div>
-                <div className="text-xs text-slate-500">so'm</div>
-              </div>
-              <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 min-w-[170px]">
-                <div className="text-xs font-medium text-slate-500">O'rtacha</div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {formatNumber(Math.round(salesSummary.averageCheck))}
-                </div>
-                <div className="text-xs text-slate-500">solishtirma</div>
-              </div>
-            </div>
           </div>
 
           <div className="h-64 rounded-2xl border border-dashed border-emerald-200 bg-gradient-to-b from-emerald-50/40 to-white px-2 py-3">
