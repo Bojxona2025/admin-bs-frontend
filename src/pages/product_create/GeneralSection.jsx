@@ -4,7 +4,6 @@ import VariantForm from "./VariantForm";
 import VariantList from "./VariantList";
 import $api from "../../http/api";
 import EventNumberSelect from "./EventNumberSelect";
-import axios from "axios";
 
 export default function GeneralSection({
   formData,
@@ -314,18 +313,20 @@ export default function GeneralSection({
 
     try {
       setLoading(true);
-      const response = await axios.get(
-        `https://tasnif.soliq.uz/api/cls-api/mxik/search-subposition`,
-        {
-          params: {
-            search_text: value,
-            page: 0,
-            size: 15,
-            lang: "uz_latn",
-          },
-        }
+      const searchParams = new URLSearchParams({
+        search_text: value,
+        page: "0",
+        size: "15",
+        lang: "uz_latn",
+      });
+      const response = await fetch(
+        `https://tasnif.soliq.uz/api/cls-api/mxik/search-subposition?${searchParams.toString()}`
       );
-      const content = response.data?.data?.content || [];
+      if (!response.ok) {
+        throw { response: { status: response.status } };
+      }
+      const data = await response.json();
+      const content = data?.data?.content || [];
       setResults(content);
       setShowDropdown(true);
     } catch (error) {
@@ -354,14 +355,21 @@ export default function GeneralSection({
       setPackagesLoading(true);
       setMxikError("");
       try {
-        const res = await axios.get(
-          `https://tasnif.soliq.uz/api/cls-api/mxik/get/by-mxik`,
-          { params: { mxikCode: formData.SPIC, lang: "uz_latn" } }
+        const searchParams = new URLSearchParams({
+          mxikCode: String(formData.SPIC),
+          lang: "uz_latn",
+        });
+        const response = await fetch(
+          `https://tasnif.soliq.uz/api/cls-api/mxik/get/by-mxik?${searchParams.toString()}`
         );
+        if (!response.ok) {
+          throw { response: { status: response.status } };
+        }
+        const data = await response.json();
 
-        if (res.data?.packages && Array.isArray(res.data.packages)) {
+        if (data?.packages && Array.isArray(data.packages)) {
           // 🔍 parentCode null bo‘lganlarni chiqarib tashlash
-          const filteredPackages = res.data.packages.filter(
+          const filteredPackages = data.packages.filter(
             (pkg) => pkg.parentCode !== null
           );
           setPackages(filteredPackages);
