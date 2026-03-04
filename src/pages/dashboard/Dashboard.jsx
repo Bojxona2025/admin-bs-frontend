@@ -567,34 +567,6 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="mt-6 rounded-2xl border border-emerald-100 bg-slate-50/70 px-5 py-4">
-            <div className="text-sm font-semibold text-slate-600 mb-2">
-              Bu yil uchun
-            </div>
-            <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
-              <div>
-                <div className="text-3xl font-bold text-slate-900">
-                  {orderStatistics?.orders?.total || 0}
-                </div>
-                <div className="text-sm text-slate-600">Sotish</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-slate-900">
-                  {formatNumber(orderStatistics?.revenue || 0)}
-                </div>
-                <div className="text-sm text-slate-600">so'm</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-slate-900">
-                  {formatNumber(orderStatistics?.revenue || 0)}
-                  <span className="text-sm text-slate-500 ml-1">so'm</span>
-                </div>
-                <div className="text-sm text-slate-600">
-                  O'tgan yilga nisbatan
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* User Roles and Top Products */}
