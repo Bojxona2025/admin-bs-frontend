@@ -62,12 +62,19 @@ const ArchiveProducts = lazy(() =>
 const TrashProducts = lazy(() =>
   import("../pages/products/karzinka").then((m) => ({ default: m.TrashProducts }))
 );
+const PromocodesPage = lazy(() =>
+  import("../pages/promocodes/Promocodes").then((m) => ({ default: m.PromocodesPage }))
+);
 
 const normalizeRole = (role) => String(role || "").toLowerCase().replace(/[_\s]/g, "");
 const isSuperAdminRole = (role) => normalizeRole(role) === "superadmin";
 const isAdminLikeRole = (role) => {
   const normalized = normalizeRole(role);
   return normalized.includes("admin") && normalized !== "superadmin";
+};
+const isEmployeeLikeRole = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === "employee" || normalized === "xodim";
 };
 const getCachedProfile = () => {
   try {
@@ -112,6 +119,8 @@ export const Router = () => {
   const actorRole = resolveActorRole(user);
   const canUseUsersPage = isSuperAdminRole(actorRole) || isAdminLikeRole(actorRole);
   const canUseNotificationsPage = isSuperAdminRole(actorRole);
+  const canUsePromocodesPage =
+    isSuperAdminRole(actorRole) || isAdminLikeRole(actorRole) || isEmployeeLikeRole(actorRole);
 
   useEffect(() => {
     dispatch(fetchUserProfile());
@@ -262,6 +271,22 @@ export const Router = () => {
           element={
             <ProtectedRoute>
               <UserDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/system/promocodes"
+          element={
+            <ProtectedRoute>
+              {loading ? (
+                <div className="min-h-[50vh] flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#249B73] border-t-transparent" />
+                </div>
+              ) : canUsePromocodesPage ? (
+                <PromocodesPage />
+              ) : (
+                <Navigate to="/indicators/general" replace />
+              )}
             </ProtectedRoute>
           }
         />

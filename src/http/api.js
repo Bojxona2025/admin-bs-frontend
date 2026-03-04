@@ -400,8 +400,11 @@ $api.interceptors.response.use(
         console.error("Token refresh failed:", refreshError);
 
         processQueue(refreshError, null);
-        const refreshMessage = getResponseMessage(refreshError?.response?.data);
-        forceLogoutToLogin(getLogoutMessageByBackend(refreshMessage));
+        const refreshStatus = Number(refreshError?.response?.status || 0);
+        if (refreshStatus === 401 || refreshStatus === 404) {
+          const refreshMessage = getResponseMessage(refreshError?.response?.data);
+          forceLogoutToLogin(getLogoutMessageByBackend(refreshMessage));
+        }
 
         return Promise.reject(refreshError);
       } finally {
