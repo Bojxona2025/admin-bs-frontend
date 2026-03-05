@@ -67,6 +67,7 @@ const menuItems = [
   { icon: "/money.svg", label: "Tushumlar", link: "/money/accounts" },
   { icon: "/retail.svg", label: "To'lovlar", link: "/money/payments" },
   { icon: "/manufacture.svg", label: "EMU buyurtmalar", link: "/emu/integration" },
+  { icon: "/tasks.svg", label: "Promokodlar", link: "/system/promocodes" },
   { icon: "/bell.svg", label: "Bildirishnomalar", link: "/notifications" },
   { icon: "/ecommerce.svg", label: "Reklama bannerlari", link: "/system/banners" },
   { icon: "/arxiv.svg", label: "Arxivlar", link: "/archive" },
@@ -81,6 +82,7 @@ const SEARCH_SHORTCUTS = [
   { type: "bo'lim", title: "Tushumlar", route: "/money/accounts", keywords: ["tushum", "daromad", "income"] },
   { type: "bo'lim", title: "To'lovlar", route: "/money/payments", keywords: ["payme", "click", "transaction", "tolov"] },
   { type: "bo'lim", title: "EMU buyurtmalar", route: "/emu/integration", keywords: ["emu", "yetkazib"] },
+  { type: "bo'lim", title: "Promokodlar", route: "/system/promocodes", keywords: ["promo", "promocode", "kupon"] },
   { type: "bo'lim", title: "Arxivlar", route: "/archive", keywords: ["arxiv"] },
   { type: "bo'lim", title: "Korzinka", route: "/trash", keywords: ["korzinka", "trash"] },
 ];

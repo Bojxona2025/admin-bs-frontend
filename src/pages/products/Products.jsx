@@ -22,11 +22,15 @@ import {
 } from "lucide-react";
 import productsApi from "../../http/products";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import LazyImage from "../../components/image/LazyImage";
 import { getProductImageUrl } from "../../utils/imageUrl";
 
 export const InventoryManagement = () => {
   const navigate = useNavigate();
+  const { user } = useSelector((state) => state.user);
+  const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
+  const isSuperAdmin = actorRole === "superadmin";
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [rowsPerPage, setRowsPerPage] = useState(30);
   const [dataLoad, setDataLoad] = useState(false);
@@ -195,6 +199,20 @@ export const InventoryManagement = () => {
     if (raw) return raw;
     const variantRaw = String(product?.variants?.[0]?.saleStatus || "").trim().toLowerCase();
     return variantRaw;
+  }, []);
+
+  const extractCompanyName = useCallback((product) => {
+    const company = product?.companyId || product?.company || {};
+    const directName =
+      product?.companyName ||
+      product?.company_name ||
+      product?.companyTitle ||
+      "";
+    if (directName) return String(directName);
+    if (company && typeof company === "object") {
+      return company?.name || company?.title || company?.companyName || "Noma'lum kompaniya";
+    }
+    return "Noma'lum kompaniya";
   }, []);
 
   const handleStatusUpdate = useCallback(async (productId, newStatus, e) => {
@@ -485,6 +503,12 @@ export const InventoryManagement = () => {
               <Package size={12} />
               <span className="truncate">Egasi: {product.owner}</span>
             </div>
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-2">
+                <Package size={12} />
+                <span className="truncate">Kompaniya: {extractCompanyName(product)}</span>
+              </div>
+            ) : null}
             <div className="flex items-center gap-2">
               <Award size={12} />
               <span>
@@ -495,7 +519,7 @@ export const InventoryManagement = () => {
         </div>
       </div>
     </div>
-  ), [activeDropdown, getCardStatus, handleProductClick, handleStatusUpdate, toggleDropdown, viewMode]);
+  ), [activeDropdown, extractCompanyName, getCardStatus, handleProductClick, handleStatusUpdate, isSuperAdmin, toggleDropdown, viewMode]);
 
   const sortedProducts = [...(products.productData || [])].sort((a, b) => {
     if (sortBy === "price") {
