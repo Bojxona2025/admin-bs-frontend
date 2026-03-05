@@ -21,6 +21,9 @@ const COMPANY_TOGGLE_ENDPOINT =
   process.env.NEXT_PUBLIC_COMPANY_TOGGLE_ENDPOINT || "/company/toggle";
 const COMPANY_DELETE_ENDPOINT =
   process.env.NEXT_PUBLIC_COMPANY_DELETE_ENDPOINT || "/company/delete";
+const API_BASE_URL =
+  process.env.VITE_BASE_URL ||
+  "http://localhost:3000/api";
 
 const normalizeRole = (role) =>
   typeof role === "string" ? role.trim().toUpperCase() : "";
@@ -74,8 +77,7 @@ export default function AdminPage() {
       localStorage.getItem("admin_token") || localStorage.getItem("accessToken");
     const adminBaseUrl =
       process.env.NEXT_PUBLIC_ADMIN_PANEL_URL || "http://localhost:5173/";
-    const apiBaseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+    const apiBaseUrl = API_BASE_URL;
     const assetsBaseUrl = apiBaseUrl.replace(/\/api$/i, "");
 
     if (!token) {
@@ -168,8 +170,7 @@ export default function AdminPage() {
   const handleIframeLoad = () => {
     if (!iframeRef.current?.contentWindow || !adminToken) return;
 
-    const apiBaseUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+    const apiBaseUrl = API_BASE_URL;
 
     iframeRef.current.contentWindow.postMessage(
       {

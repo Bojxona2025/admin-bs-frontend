@@ -16,31 +16,45 @@ const fixMojibake = (value) => {
   }
 };
 
-const toAbsoluteUrl = (pathValue) => {
-  const baseURL =
-    (process.env.NEXT_PUBLIC_API_URL || "https://bsmarket.uz/api").replace(
-      /\/+$/,
-      ""
-    );
-  const baseOrigin = baseURL.replace(/\/api$/i, "");
-
-  const normalizedPath = pathValue
-    .replace(/\\/g, "/")
+const normalizePath = (value) =>
+  value
+    ?.replace(/\\/g, "/")
     .replace(/^\/+/, "")
-    .replace(/^api\/+/i, "");
+    .replace(/^api\/+/i, "") || "";
+
+const extractUploadsPath = (value) => {
+  if (!value || typeof value !== "string") return "";
+
+  const raw = value.trim();
+  if (!raw) return "";
+
+  const tryFromUrl = (() => {
+    try {
+      const parsed = new URL(raw);
+      return normalizePath(parsed.pathname);
+    } catch {
+      return "";
+    }
+  })();
+
+  const normalized = tryFromUrl || normalizePath(raw);
+  return normalized.startsWith("uploads/") ? normalized : "";
+};
+
+const toAbsoluteUrl = (pathValue) => {
+  const normalizedPath = normalizePath(pathValue);
 
   if (!normalizedPath) return null;
 
   const encodedPath = encodeURI(normalizedPath);
 
   // Brauzerdan har doim Next /api proxy orqali yuramiz.
-  // Bu backendga kerakli internal headerlarni server tomonda qo'shishga yordam beradi.
-  if (normalizedPath.startsWith("uploads/")) {
-    return `/api/${encodedPath}`;
-  }
-
   return `/api/${encodedPath}`;
 };
+
+const API_BASE_URL =
+  process.env.VITE_BASE_URL ||
+  "https://bsmarket.uz/api";
 
 export const getImageUrls = (imagePath) => {
   if (!imagePath || typeof imagePath !== "string") {
@@ -51,16 +65,37 @@ export const getImageUrls = (imagePath) => {
   const repairedPath = fixMojibake(originalPath);
 
   const candidates = [];
+  const pushUnique = (value) => {
+    if (!value) return;
+    if (!candidates.includes(value)) candidates.push(value);
+  };
+
+  const addUploadsVariants = (path) => {
+    if (!path) return;
+    const encodedPath = encodeURI(path);
+    pushUnique(`/api/${encodedPath}`);
+    pushUnique(`${baseOrigin}/${encodedPath}`);
+    pushUnique(`${baseURL}/${encodedPath}`);
+    pushUnique(`${baseOrigin}/api/${encodedPath}`);
+  };
 
   const pushCandidate = (value) => {
     if (!value) return;
     if (value.startsWith("http://") || value.startsWith("https://")) {
-      candidates.push(encodeURI(value));
+      const uploadPath = extractUploadsPath(value);
+      if (uploadPath) {
+        addUploadsVariants(uploadPath);
+      }
+      pushUnique(encodeURI(value));
       return;
     }
     const absolute = toAbsoluteUrl(value);
-    if (absolute) candidates.push(absolute);
+    if (absolute) pushUnique(absolute);
   };
+
+  const baseURL =
+    API_BASE_URL.replace(/\/+$/, "");
+  const baseOrigin = baseURL.replace(/\/api$/i, "");
 
   // Avval original yo'lni sinab ko'ramiz (ba'zi backendlarda fayl nomi aynan shunday saqlangan bo'ladi)
   pushCandidate(originalPath);
@@ -70,25 +105,9 @@ export const getImageUrls = (imagePath) => {
     pushCandidate(repairedPath);
   }
 
-  // Ba'zi serverlarda static fayl /uploads, boshqalarida /api/uploads orqali ochiladi.
-  // Shu sabab ikkala variantni ham fallback sifatida qo'shamiz.
-  const baseURL =
-    (process.env.NEXT_PUBLIC_API_URL || "https://bsmarket.uz/api").replace(
-      /\/+$/,
-      ""
-    );
-  const baseOrigin = baseURL.replace(/\/api$/i, "");
-
   const addApiUploadsFallback = (value) => {
-    const normalizedPath = value
-      ?.replace(/\\/g, "/")
-      .replace(/^\/+/, "")
-      .replace(/^api\/+/i, "");
-    if (!normalizedPath || !normalizedPath.startsWith("uploads/")) return;
-    const encodedPath = encodeURI(normalizedPath);
-    candidates.push(`${baseOrigin}/${encodedPath}`);
-    candidates.push(`${baseURL}/${encodedPath}`);
-    candidates.push(`${baseOrigin}/api/${encodedPath}`);
+    const normalizedPath = extractUploadsPath(value);
+    addUploadsVariants(normalizedPath);
   };
 
   addApiUploadsFallback(originalPath);
@@ -96,7 +115,7 @@ export const getImageUrls = (imagePath) => {
     addApiUploadsFallback(repairedPath);
   }
 
-  return Array.from(new Set(candidates));
+  return candidates;
 };
 
 export const getImageUrl = (imagePath) => {

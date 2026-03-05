@@ -3,6 +3,7 @@ import axios from "axios";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_PROXY_BASE ||
   process.env.NEXT_PUBLIC_API_BASE ||
+  process.env.VITE_BASE_URL ||
   "/api";
 const REFRESH_ENDPOINT = "/auth/refresh/token";
 const AUTH_ENDPOINTS = ["/auth/phone", "/auth/verify", "/auth/system/login", REFRESH_ENDPOINT];

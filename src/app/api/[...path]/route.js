@@ -1,7 +1,7 @@
 const RAW_BACKEND_BASE =
   process.env.API_URL ||
   process.env.INTERNAL_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.VITE_BASE_URL ||
   "http://localhost:3000/api";
 
 const BACKEND_BASE = RAW_BACKEND_BASE.replace(/\/+$/, "");

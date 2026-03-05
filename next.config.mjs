@@ -1,4 +1,8 @@
 /** @type {import('next').NextConfig} */
+const PUBLIC_API_URL =
+  process.env.VITE_BASE_URL ||
+  "http://localhost:3000/api";
+
 const nextConfig = {
   images: {
     // Image optimization server-side ishlashini developmentda ham yoqadi, productionda o‘chadi
@@ -124,7 +128,7 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL}/:path*`,
+        destination: `${PUBLIC_API_URL}/:path*`,
       },
     ];
   },

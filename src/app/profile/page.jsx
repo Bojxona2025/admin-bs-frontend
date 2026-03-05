@@ -13,6 +13,10 @@ import { useTranslation } from "react-i18next";
 
 const getStoredAccessToken = () =>
   localStorage.getItem("accessToken") || localStorage.getItem("access_token");
+const API_BASE_URL =
+  process.env.VITE_BASE_URL ||
+  "http://localhost:3000/api";
+const API_ORIGIN = API_BASE_URL.replace(/\/api$/i, "");
 
 const ProfileClient = () => {
   const { t } = useTranslation();
@@ -55,9 +59,7 @@ const ProfileClient = () => {
           phone: profileData.phoneNumber || "",
           email: profileData.email || "",
           avatar: profileData.avatar
-            ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}${
-                profileData.avatar
-              }`
+            ? `${API_ORIGIN}${profileData.avatar}`
             : null,
           firstName: profileData.firstName || "",
           lastName: profileData.lastName || "",
