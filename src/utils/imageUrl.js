@@ -28,12 +28,12 @@ export const toAssetUrl = (path) => {
     .replace(/\/{2,}/g, "/");
   if (!normalized) return "";
 
-  // Backendlar turlicha static route ishlatadi:
-  // 1) /uploads/...      (ASSET_BASE bilan)
-  // 2) /api/uploads/...  (API_BASE bilan)
-  // Ko'p holatda uploads root'dan serve qilinadi, shuni primary qilamiz.
-  const prefersAssetBase = normalized.startsWith("uploads/");
-  const base = prefersAssetBase ? ASSET_BASE : API_BASE;
+  if (normalized.startsWith("uploads/")) {
+    return encodeURI(`/api/${normalized}`);
+  }
+
+  // Uploads bo'lmagan asset yo'llarda env base'dan foydalanamiz.
+  const base = API_BASE || ASSET_BASE;
 
   return encodeURI(`${base}/${normalized}`);
 };
@@ -82,8 +82,9 @@ export const toAssetCandidates = (path) => {
 
   const rawCandidates = normalized.startsWith("uploads/")
     ? [
-        `${ASSET_BASE}/${normalized}`,
+        `/api/${normalized}`,
         `${API_BASE}/${normalized}`,
+        `${ASSET_BASE}/${normalized}`,
         `/${normalized}`,
       ]
     : [
