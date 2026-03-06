@@ -25,15 +25,29 @@ import { motion, AnimatePresence } from "framer-motion";
 import GlobalTable from "../../components/global_table/GlobalTable";
 import { useNavigate } from "react-router-dom";
 import { getRoleLabelUz } from "../../utils/roleLabel";
+import { useSelector } from "react-redux";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useSelector((state) => state.user);
+  const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
+  const isSuperAdmin = actorRole === "superadmin";
+  const actorCompanyId = String(user?.companyId?._id || user?.companyId || "");
   const [selectedPeriod, setSelectedPeriod] = useState("Hafta");
   const [modalPosition, setModalPosition] = useState({ top: 0, right: 0 });
   const [orderStatistics, setOrderStatistics] = useState(null);
   const [userStatistics, setUserStatistics] = useState(null);
-  const [orderData, setOrderData] = useState(null);
   const [userData, setUserData] = useState(null);
+  const [realSalesStats, setRealSalesStats] = useState({
+    chartData: [],
+    totals: {
+      totalOrders: 0,
+      grossRevenue: 0,
+      paidRevenue: 0,
+      onlinePaidCount: 0,
+      cashPaidCount: 0,
+    },
+  });
   const [loading, setLoading] = useState(true);
   const [dataLoad, setDataLoad] = useState(false);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
@@ -80,7 +94,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchAllData();
-  }, [selectedPeriod]);
+  }, [selectedPeriod, isSuperAdmin, actorCompanyId]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -151,12 +165,189 @@ export default function Dashboard() {
       await Promise.all([
         fetchOrderStatistics(),
         fetchUserStatistics(),
-        fetchOrderData(),
         fetchUserData(),
+        fetchRealSalesStats(),
       ]);
     } finally {
       setLoading(false);
     }
+  }
+
+  const toQueryDate = (dateValue) => {
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const getPeriodRange = () => {
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+
+    if (selectedPeriod === "Hafta") {
+      start.setDate(start.getDate() - 6);
+    } else if (selectedPeriod === "Oy") {
+      start.setDate(1);
+    } else if (selectedPeriod === "Yil") {
+      start.setMonth(0, 1);
+    }
+
+    return { start, end };
+  };
+
+  const getOrderTotal = (order) => {
+    const direct = Number(order?.totalSellingPrice ?? order?.sellingPrice);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+    const items = Array.isArray(order?.items) ? order.items : [];
+    return items.reduce((sum, item) => {
+      const lineTotal = Number(item?.totalSellingPrice ?? item?.sellingPrice);
+      if (Number.isFinite(lineTotal) && lineTotal > 0) return sum + lineTotal;
+      const unit = Number(item?.price ?? item?.variantPrice ?? 0);
+      const qty = Number(item?.productQuantity ?? item?.quantity ?? 1);
+      return sum + unit * qty;
+    }, 0);
+  };
+
+  const buildChartFromOrders = (orders) => {
+    const { start, end } = getPeriodRange();
+    const isYearly = selectedPeriod === "Yil";
+    const points = [];
+
+    if (isYearly) {
+      for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
+        points.push({
+          key: String(monthIndex + 1),
+          name: uzbekMonths[monthIndex],
+          value: 0,
+          paidValue: 0,
+          count: 0,
+          timestamp: new Date(start.getFullYear(), monthIndex, 1).getTime(),
+        });
+      }
+    } else {
+      const current = new Date(start);
+      while (current <= end) {
+        const formatted = formatDateUzbek(current);
+        points.push({
+          key: current.toISOString(),
+          name: formatted.dayMonth,
+          value: 0,
+          paidValue: 0,
+          count: 0,
+          timestamp: current.getTime(),
+        });
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
+    const pointMap = new Map(points.map((point) => [point.key, point]));
+
+    orders.forEach((order) => {
+      const createdAt = new Date(order?.createdAt || order?.updatedAt || Date.now());
+      if (Number.isNaN(createdAt.getTime())) return;
+      const amount = getOrderTotal(order);
+      const isPaid = Boolean(order?.paid);
+
+      let pointKey = "";
+      if (isYearly) {
+        pointKey = String(createdAt.getMonth() + 1);
+      } else {
+        const dateOnly = new Date(createdAt);
+        dateOnly.setHours(0, 0, 0, 0);
+        pointKey = dateOnly.toISOString();
+      }
+
+      const point = pointMap.get(pointKey);
+      if (!point) return;
+      point.value += amount;
+      point.count += 1;
+      if (isPaid) {
+        point.paidValue += amount;
+      }
+    });
+
+    return points;
+  };
+
+  async function fetchRealSalesStats() {
+    const { start, end } = getPeriodRange();
+    const dateFrom = toQueryDate(start);
+    const dateTo = toQueryDate(end);
+
+    const collectedOrders = [];
+    let page = 1;
+    let totalPagesLocal = 1;
+    const limit = 200;
+
+    try {
+      do {
+        const params = new URLSearchParams();
+        params.append("page", String(page));
+        params.append("limit", String(limit));
+        params.append("sortByCreatedAt", "asc");
+        if (dateFrom) {
+          params.append("dateFrom", dateFrom);
+          params.append("datefrom", dateFrom);
+        }
+        if (dateTo) {
+          params.append("dateTo", dateTo);
+          params.append("dateto", dateTo);
+        }
+        if (!isSuperAdmin && actorCompanyId) {
+          params.append("companyId", actorCompanyId);
+        }
+
+        const { data } = await $api.get(`/order/get/all?${params.toString()}`);
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        collectedOrders.push(...rows);
+
+        totalPagesLocal = Number(data?.pagination?.pages || 1);
+        page += 1;
+      } while (page <= totalPagesLocal && page <= 30);
+    } catch {
+      setRealSalesStats({
+        chartData: buildChartFromOrders([]),
+        totals: {
+          totalOrders: 0,
+          grossRevenue: 0,
+          paidRevenue: 0,
+          onlinePaidCount: 0,
+          cashPaidCount: 0,
+        },
+      });
+      return;
+    }
+
+    const totals = collectedOrders.reduce(
+      (acc, order) => {
+        const amount = getOrderTotal(order);
+        acc.totalOrders += 1;
+        acc.grossRevenue += amount;
+        if (order?.paid) {
+          acc.paidRevenue += amount;
+          if (order?.paymentMethodOnline) acc.onlinePaidCount += 1;
+          else acc.cashPaidCount += 1;
+        }
+        return acc;
+      },
+      {
+        totalOrders: 0,
+        grossRevenue: 0,
+        paidRevenue: 0,
+        onlinePaidCount: 0,
+        cashPaidCount: 0,
+      }
+    );
+
+    setRealSalesStats({
+      chartData: buildChartFromOrders(collectedOrders),
+      totals,
+    });
   }
 
   async function fetchOrderStatistics() {
@@ -178,15 +369,6 @@ export default function Dashboard() {
       setUserStatistics(data);
     } catch (error) {
       setUserStatistics(null);
-    }
-  }
-
-  async function fetchOrderData() {
-    try {
-      let { data } = await $api.get(`/dashboard/orders/data`);
-      setOrderData(data);
-    } catch (error) {
-      setOrderData(null);
     }
   }
 
@@ -280,56 +462,8 @@ export default function Dashboard() {
   };
 
   const salesChartData = useMemo(() => {
-    if (!Array.isArray(orderStatistics?.salesData)) return [];
-
-    const salesData = orderStatistics.salesData;
-    const isYearly = selectedPeriod === "Yil";
-
-    if (isYearly) {
-      return uzbekMonths.map((month, index) => {
-        const monthData = salesData.find((item) => Number(item?._id) === index + 1);
-        return {
-          key: String(index + 1),
-          name: month,
-          value: Number(monthData?.total || 0),
-          count: Number(monthData?.count || 0),
-        };
-      });
-    }
-
-    const mapped = salesData
-      .map((item, index) => {
-        const rawId = item?._id;
-        let parsedDate = null;
-
-        if (typeof rawId === "string" || rawId instanceof Date) {
-          const maybeDate = new Date(rawId);
-          if (!Number.isNaN(maybeDate.getTime())) parsedDate = maybeDate;
-        } else if (rawId && typeof rawId === "object") {
-          const year = Number(rawId.year || rawId.y);
-          const month = Number(rawId.month || rawId.m);
-          const day = Number(rawId.day || rawId.d);
-          if (year && month && day) {
-            const maybeDate = new Date(year, month - 1, day);
-            if (!Number.isNaN(maybeDate.getTime())) parsedDate = maybeDate;
-          }
-        }
-
-        const fallbackLabel = `#${index + 1}`;
-        const formatted = parsedDate ? formatDateUzbek(parsedDate) : null;
-
-        return {
-          key: parsedDate ? parsedDate.toISOString() : fallbackLabel,
-          name: formatted ? formatted.dayMonth : fallbackLabel,
-          value: Number(item?.total || 0),
-          count: Number(item?.count || 0),
-          timestamp: parsedDate ? parsedDate.getTime() : Number.MAX_SAFE_INTEGER + index,
-        };
-      })
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    return mapped;
-  }, [orderStatistics?.salesData, selectedPeriod]);
+    return Array.isArray(realSalesStats?.chartData) ? realSalesStats.chartData : [];
+  }, [realSalesStats]);
 
   const getRoleDistribution = () => {
     if (!userStatistics?.roleBreakdown) return [];
@@ -457,7 +591,9 @@ export default function Dashboard() {
               </div>
               <div className="ml-4">
                 <div className="text-2xl font-bold text-gray-900">
-                  {orderStatistics?.orders?.total || 0}
+                  {realSalesStats?.totals?.totalOrders ||
+                    orderStatistics?.orders?.total ||
+                    0}
                 </div>
                 <div className="text-sm text-gray-600">Jami buyurtmalar</div>
                 <div className="text-xs text-orange-600">
@@ -481,12 +617,17 @@ export default function Dashboard() {
               </div>
               <div className="ml-4">
                 <div className="text-2xl font-bold text-gray-900">
-                  {formatNumber(orderStatistics?.revenue || 0)}
+                  {formatNumber(
+                    realSalesStats?.totals?.paidRevenue || orderStatistics?.revenue || 0
+                  )}
                 </div>
-                <div className="text-sm text-gray-600">so'm (Daromad)</div>
+                <div className="text-sm text-gray-600">so'm (Foyda - to'langan)</div>
                 <div className="text-xs text-green-600">
-                  Onlain: {orderStatistics?.orders?.payments?.online || 0}(
-                  {orderData?.stats?.[0]?.percentage || "0"}%)
+                  Jami savdo: {formatNumber(realSalesStats?.totals?.grossRevenue || 0)} so'm
+                </div>
+                <div className="text-xs text-emerald-700">
+                  Online: {realSalesStats?.totals?.onlinePaidCount || 0} | Naqd:{" "}
+                  {realSalesStats?.totals?.cashPaidCount || 0}
                 </div>
               </div>
             </div>
@@ -545,6 +686,8 @@ export default function Dashboard() {
                   <Tooltip
                     formatter={(value, key) => {
                       if (key === "value") return [`${formatNumber(value)} so'm`, "Daromad"];
+                      if (key === "paidValue")
+                        return [`${formatNumber(value)} so'm`, "To'langan tushum"];
                       if (key === "count") return [formatNumber(value), "Sotish"];
                       return [value, key];
                     }}
@@ -557,6 +700,14 @@ export default function Dashboard() {
                     strokeWidth={3.5}
                     dot={{ fill: "#0ea76b", strokeWidth: 0, r: 4 }}
                     activeDot={{ r: 6, fill: "#0b8c59" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="paidValue"
+                    stroke="#2563eb"
+                    strokeWidth={2.5}
+                    dot={{ fill: "#2563eb", strokeWidth: 0, r: 3 }}
+                    activeDot={{ r: 5, fill: "#1d4ed8" }}
                   />
                 </LineChart>
               </ResponsiveContainer>

@@ -23,6 +23,8 @@ export const CreateCategoryModal = ({
   const [isAutoTranslating, setIsAutoTranslating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const DANGEROUS_FORMAT_MESSAGE =
+    "Xavfli formatdagi so'rov aniqlandi. Ma'lumotni tekshirib qayta yuboring.";
 
   useEffect(() => {
     if (isOpen) {
@@ -134,9 +136,18 @@ export const CreateCategoryModal = ({
       await onSave(formDataToSend);
       handleClose();
     } catch (error) {
+      const backendMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.msg ||
+        error?.message ||
+        "";
+      const isDangerousFormat = backendMessage
+        .toLowerCase()
+        .includes("xavfli formatdagi so'rov");
       setErrors((prev) => ({
         ...prev,
-        submit: error?.response?.data?.message || "Kategoriya yaratishda xatolik yuz berdi",
+        submit: backendMessage || "Kategoriya yaratishda xatolik yuz berdi",
+        submitTone: isDangerousFormat ? "warning" : "error",
       }));
     } finally {
       setIsLoading(false);
@@ -172,9 +183,19 @@ export const CreateCategoryModal = ({
 
           <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-5">
             {errors.submit && (
-              <div className="flex items-center rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">
+              <div
+                className={`flex items-center rounded-lg p-3 ${
+                  errors.submitTone === "warning"
+                    ? "border border-amber-200 bg-amber-50 text-amber-800"
+                    : "border border-red-200 bg-red-50 text-red-700"
+                }`}
+              >
                 <AlertCircle className="mr-2 h-5 w-5 flex-shrink-0" />
-                <span className="text-sm">{errors.submit}</span>
+                <span className="text-sm">
+                  {errors.submitTone === "warning"
+                    ? DANGEROUS_FORMAT_MESSAGE
+                    : errors.submit}
+                </span>
               </div>
             )}
 
