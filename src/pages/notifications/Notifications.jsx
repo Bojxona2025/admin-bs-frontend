@@ -36,6 +36,8 @@ export const NotificationAdminPanel = () => {
     totalItems: 0,
   });
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [realtimeState, setRealtimeState] = useState("Ulanmagan");
+  const [lastRealtimeEvent, setLastRealtimeEvent] = useState("");
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
     position: { top: 0, left: 0 },
@@ -149,6 +151,25 @@ export const NotificationAdminPanel = () => {
   useEffect(() => {
     const disconnect = connectNotificationRealtime({
       onRefresh: () => fetchProducts(paginationData.currentPage),
+      onPayload: (payload) => {
+        const eventName = String(payload?.event || "");
+        if (eventName) {
+          setLastRealtimeEvent(eventName);
+        }
+      },
+      onStatus: (status) => {
+        if (status?.type === "connected") {
+          setRealtimeState("Ulangan");
+          return;
+        }
+        if (status?.type === "connect_error") {
+          setRealtimeState("Ulanish xatosi");
+          return;
+        }
+        if (status?.type === "disconnected") {
+          setRealtimeState("Ulanish uzildi");
+        }
+      },
     });
 
     const handleCreated = () => fetchProducts(paginationData.currentPage);
@@ -311,6 +332,12 @@ export const NotificationAdminPanel = () => {
       fetchProducts(1);
     } catch (error) {
       console.log("Xatolik:", error);
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.msg ||
+        error?.message ||
+        "Bildirishnoma yaratishda xatolik yuz berdi";
+      throw new Error(message);
     }
   }
 
@@ -325,6 +352,22 @@ export const NotificationAdminPanel = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
                 {userId ? "Foydalanuvchi xabarlari" : "Bildirishnomalar"}
               </h1>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  realtimeState === "Ulangan"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : realtimeState === "Ulanish xatosi"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                Realtime: {realtimeState}
+              </span>
+              {lastRealtimeEvent ? (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                  {lastRealtimeEvent}
+                </span>
+              ) : null}
               <RefreshCcw
                 size={14}
                 className="text-slate-500 cursor-pointer hover:text-emerald-700 transition-colors"

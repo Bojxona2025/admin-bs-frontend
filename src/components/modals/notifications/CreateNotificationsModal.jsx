@@ -31,6 +31,7 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [sendLogs, setSendLogs] = useState([]);
 
   // User selection state
   const [searchTerm, setSearchTerm] = useState("");
@@ -39,6 +40,23 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
   const [isOn, setIsOn] = useState(false);
   const isSuperAdmin = actorRole === "superadmin";
   const actorCompanyId = user?.companyId?._id || user?.companyId || null;
+  const accessToken =
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    "";
+
+  const getErrorMessage = (error, fallback) =>
+    error?.response?.data?.message || error?.response?.data?.msg || error?.message || fallback;
+
+  const addSendLog = (text) => {
+    const time = new Date().toLocaleTimeString("uz-UZ", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    setSendLogs((prev) => [...prev, `[${time}] ${text}`]);
+  };
 
   const toggleSwitch = () => {
     setIsOn(!isOn);
@@ -121,6 +139,7 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
         limit: 50,
         page: currentPage,
         query: searchTerm,
+        search: searchTerm,
       };
       if (isAdmin && actorCompanyId) {
         params.companyId = actorCompanyId;
@@ -128,7 +147,13 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
 
       const response = await $api.get("/users/get/all", { params });
       const payload = response.data || {};
-      const rawUsers = payload?.data || payload?.users || [];
+      const rawUsers =
+        payload?.data ||
+        payload?.users ||
+        payload?.items ||
+        payload?.results ||
+        payload?.data?.users ||
+        [];
 
       const filteredUsers = rawUsers.filter((item) => {
         const role = String(item?.role || "").toLowerCase();
@@ -136,7 +161,8 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
         const sameCompany = actorCompanyId
           ? String(itemCompanyId || "") === String(actorCompanyId)
           : true;
-
+        if (isSuperAdmin) return role !== "superadmin";
+        if (isAdmin) return role === "employee" && sameCompany;
         return role === "employee" && sameCompany;
       });
 
@@ -146,6 +172,12 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
       });
     } catch (error) {
       console.error("Foydalanuvchilarni yuklashda xatolik:", error);
+      setAllUsers({ data: [], totalPages: 1, currentPage: 1 });
+      setErrors((prev) => ({
+        ...prev,
+        submit: "Foydalanuvchilarni yuklab bo'lmadi. Qayta urinib ko'ring.",
+        submitTone: "warning",
+      }));
     }
   }
 
@@ -235,24 +267,113 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
     if (!validateForm()) {
       return;
     }
+    if (isLoading) return;
     setIsLoading(true);
+    setSendLogs([]);
     try {
       if (isOn === true) {
-        if (!formData.sendToAllUsers && formData.selectedUsers?.length > 0) {
-          await Promise.all(
-            formData.selectedUsers.map((uid) =>
-              $api.post("/notifications/fcm/send", {
-                userId: uid,
-                title: formData.name,
-                body: formData.message,
-              })
-            )
+        const title = String(formData.name || "").trim();
+        const body = String(formData.message || "").trim();
+        if (!title || !body) {
+          setErrors((prev) => ({
+            ...prev,
+            submit: "Sarlavha va matnni to'ldiring",
+            submitTone: "warning",
+          }));
+          return;
+        }
+
+        try {
+          if (!formData.sendToAllUsers && formData.selectedUsers?.length > 0) {
+            addSendLog(
+              `POST /notifications/fcm/send -> ${formData.selectedUsers.length} ta foydalanuvchi`
+            );
+            const pushResults = await Promise.allSettled(
+              formData.selectedUsers.map((uid) =>
+                $api.post("/notifications/fcm/send", {
+                  userId: uid,
+                  title,
+                  body,
+                })
+              )
+            );
+            const failed = pushResults.filter((row) => row.status === "rejected");
+            if (failed.length > 0) {
+              addSendLog(`Push yuborishda ${failed.length} ta xato bo'ldi`);
+              throw failed[0].reason;
+            }
+            addSendLog("Tanlangan foydalanuvchilarga push muvaffaqiyatli yuborildi");
+          } else {
+            addSendLog("POST /notifications/fcm/send/all yuborilmoqda...");
+            const res = await $api.post(
+              "/notifications/fcm/send/all",
+              { title, body },
+              {
+                headers: {
+                  Authorization: accessToken ? `Bearer ${accessToken}` : undefined,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (res?.status === 200 && res?.data?.success) {
+              const tokenCount = Number(res?.data?.totalTokens || 0);
+              addSendLog(`send/all -> 200 OK, tokenlar: ${tokenCount}`);
+              setErrors((prev) => ({
+                ...prev,
+                submit: `Push yuborildi. Tokenlar: ${tokenCount}`,
+                submitTone: "success",
+              }));
+            } else {
+              addSendLog(`send/all javob: ${res?.status || "unknown"} ${res?.data?.message || ""}`);
+            }
+          }
+        } catch (fcmError) {
+          const status = Number(fcmError?.response?.status || 0);
+          const backendMessage = getErrorMessage(
+            fcmError,
+            "Push yuborishda kutilmagan xatolik"
           );
-        } else {
-          await $api.post("/notifications/fcm/send/all", {
-            title: formData.name,
-            body: formData.message,
-          });
+          addSendLog(`Push xatosi: status=${status || "unknown"}; message=${backendMessage}`);
+
+          if (status === 400) {
+            setErrors((prev) => ({
+              ...prev,
+              submit: backendMessage || "Noto'g'ri ma'lumot yuborildi",
+              submitTone: "warning",
+            }));
+            return;
+          }
+          if (status === 401) {
+            setErrors((prev) => ({
+              ...prev,
+              submit: "Sessiya tugagan. Qayta login qiling",
+              submitTone: "error",
+            }));
+            return;
+          }
+          if (status === 404) {
+            setErrors((prev) => ({
+              ...prev,
+              submit:
+                "Foydalanuvchilarda push token yo'q. Ilovaga kirib push ruxsatini yoqishlari kerak.",
+              submitTone: "warning",
+            }));
+          } else if (status === 500) {
+            setErrors((prev) => ({
+              ...prev,
+              submit: "Server xatosi. Keyinroq urinib ko'ring",
+              submitTone: "error",
+            }));
+            return;
+          } else {
+            setErrors((prev) => ({
+              ...prev,
+              submit: backendMessage || "Kutilmagan xatolik",
+              submitTone: "error",
+            }));
+            return;
+          }
         }
       }
 
@@ -274,15 +395,19 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
             : formData.selectedUsers,
         notificationType: "system",
       };
-      if (isSuperAdmin && actorCompanyId) {
-        dataToSend.companyId = actorCompanyId;
-      }
+      addSendLog(
+        `POST /notifications/create (${dataToSend.forAllUsers ? "forAllUsers=true" : `userIds=${dataToSend.userIds.length}`})`
+      );
       await onSave(dataToSend);
+      addSendLog("Bildirishnoma saqlandi va yuborildi");
       resetForm();
       onClose();
     } catch (error) {
       console.error("Xabar yaratishda xatolik:", error);
-      setErrors({ submit: "Xabar yaratishda xatolik yuz berdi" });
+      setErrors({
+        submit: getErrorMessage(error, "Xabar yaratishda xatolik yuz berdi"),
+        submitTone: "error",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -302,6 +427,7 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
     setErrors({});
     setSearchTerm("");
     setCurrentPage(1);
+    setSendLogs([]);
   };
 
   const handleClose = () => {
@@ -353,9 +479,29 @@ export const CreateNotificationsModal = ({ isOpen, onClose, onSave }) => {
             <div className="flex-1 flex flex-col min-h-0">
               <div className="flex-1 p-5 md:p-6 space-y-6 overflow-y-auto">
                 {errors.submit && (
-                  <div className="flex items-center p-3 text-red-800 bg-red-100 border border-red-200 rounded-lg">
+                  <div
+                    className={`flex items-center p-3 border rounded-lg ${
+                      errors.submitTone === "warning"
+                        ? "text-amber-800 bg-amber-100 border-amber-200"
+                        : errors.submitTone === "success"
+                        ? "text-emerald-800 bg-emerald-100 border-emerald-200"
+                        : "text-red-800 bg-red-100 border-red-200"
+                    }`}
+                  >
                     <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
                     <span className="text-sm">{errors.submit}</span>
+                  </div>
+                )}
+                {sendLogs.length > 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      Yuborish logi
+                    </p>
+                    <div className="max-h-28 space-y-1 overflow-y-auto text-xs text-slate-700">
+                      {sendLogs.map((log, idx) => (
+                        <p key={`${log}-${idx}`}>{log}</p>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {/* Message Name (Uzbek) */}

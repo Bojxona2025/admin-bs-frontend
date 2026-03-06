@@ -123,6 +123,19 @@ const getRoleFromToken = () => {
     return "";
   }
 };
+
+const isReadNotification = (item) =>
+  Boolean(
+    item?.isRead ||
+      item?.read ||
+      item?.is_read ||
+      item?.readAt ||
+      item?.notificationId?.isRead ||
+      item?.notificationId?.read ||
+      item?.notificationId?.is_read ||
+      item?.notificationId?.readAt
+  );
+
 const resolveActorRole = (user) => {
   const cached = getCachedProfile();
   return normalizeRole(
@@ -307,11 +320,14 @@ export default function Navbar({
     } catch (error) {
       try {
         const { data } = await $api.get("/notifications/all", {
-          params: { page: 1, limit: 1 },
+          params: { page: 1, limit: 100 },
         });
-        const total =
-          data?.totalNotifications || data?.total || data?.count || 0;
-        setNotificationCount(total);
+        const items =
+          data?.notifications || data?.notificationsAll || data?.data || [];
+        const unread = Array.isArray(items)
+          ? items.filter((item) => !isReadNotification(item)).length
+          : 0;
+        setNotificationCount(unread);
       } catch (innerError) {
         setNotificationCount(0);
       }

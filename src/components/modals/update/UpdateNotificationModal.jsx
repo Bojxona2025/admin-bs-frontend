@@ -10,6 +10,9 @@ export default function UpdateNotificationModal({
   onUpdate,
 }) {
   const { user } = useSelector((state) => state.user);
+  const actorRole = String(user?.role || "").toLowerCase().replace(/[_\s]/g, "");
+  const isSuperAdmin = actorRole === "superadmin";
+  const isAdmin = actorRole === "admin";
   const actorCompanyId = user?.companyId?._id || user?.companyId || null;
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,8 +84,9 @@ export default function UpdateNotificationModal({
         limit: 50,
         page: currentPage,
         query: searchTerm,
+        search: searchTerm,
       };
-      if (actorCompanyId) {
+      if (isAdmin && actorCompanyId) {
         params.companyId = actorCompanyId;
       }
 
@@ -96,6 +100,7 @@ export default function UpdateNotificationModal({
         const sameCompany = actorCompanyId
           ? String(itemCompanyId || "") === String(actorCompanyId)
           : true;
+        if (isSuperAdmin) return role !== "superadmin";
         return role === "employee" && sameCompany;
       });
 

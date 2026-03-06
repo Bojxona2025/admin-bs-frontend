@@ -1,112 +1,132 @@
-const normalizeBaseUrl = (baseUrl) => {
-  if (!baseUrl) return "";
-  return String(baseUrl).replace(/\/+$/, "");
-};
+const SOCKET_IO_CDN = "https://cdn.socket.io/4.7.5/socket.io.min.js";
 
-const buildWsCandidates = () => {
-  const explicit = normalizeBaseUrl(import.meta.env.VITE_NOTIFICATION_WS_URL);
+let socketIoScriptPromise = null;
+
+const normalizeBaseUrl = (baseUrl) =>
+  String(baseUrl || "")
+    .trim()
+    .replace(/\/+$/, "");
+
+const getAccessToken = () =>
+  localStorage.getItem("accessToken") ||
+  localStorage.getItem("access_token") ||
+  localStorage.getItem("token") ||
+  "";
+
+const resolveSocketBaseUrl = () => {
+  const explicit =
+    normalizeBaseUrl(import.meta.env.VITE_NOTIFICATION_SOCKET_URL) ||
+    normalizeBaseUrl(import.meta.env.VITE_NOTIFICATION_WS_URL);
+  if (explicit) return explicit;
+
   const apiBase = normalizeBaseUrl(import.meta.env.VITE_BASE_URL);
+  if (apiBase) return apiBase.replace(/\/api$/i, "");
 
-  if (explicit) return [explicit];
-  if (!apiBase) return [];
-
-  const origin = apiBase.replace(/\/api$/, "");
-  const wsOrigin = origin.replace(/^http/, "ws");
-
-  return [
-    `${wsOrigin}/socket.io/?EIO=4&transport=websocket`,
-    `${wsOrigin}/ws/notifications`,
-    `${wsOrigin}/notifications/ws`,
-  ];
+  return "https://bsmarket.uz";
 };
 
-const shouldRefreshByPayload = (payload) => {
-  if (!payload) return false;
-  const type = String(payload?.type || payload?.event || "").toLowerCase();
-  const action = String(payload?.action || "").toLowerCase();
+const loadSocketIoClient = () => {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (window.io) return Promise.resolve(window.io);
+  if (socketIoScriptPromise) return socketIoScriptPromise;
 
-  if (type.includes("notification")) return true;
-  if (action.includes("notification")) return true;
-  if (payload?.notification || payload?.notificationId) return true;
-
-  return false;
-};
-
-export const connectNotificationRealtime = ({ onRefresh, onPayload }) => {
-  const wsEnabled =
-    import.meta.env.VITE_ENABLE_NOTIFICATION_WS === "true" ||
-    Boolean(import.meta.env.VITE_NOTIFICATION_WS_URL);
-  if (!wsEnabled) {
-    return () => {};
-  }
-
-  const token =
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token");
-  const wsCandidates = buildWsCandidates();
-  let socket = null;
-  let isClosed = false;
-  let currentCandidateIndex = 0;
-  let reconnectTimer = null;
-  let failedAttempts = 0;
-  const maxFailedAttempts = wsCandidates.length * 3;
-
-  const scheduleReconnect = () => {
-    if (isClosed || failedAttempts >= maxFailedAttempts) return;
-    const delay = Math.min(15000, 2000 + failedAttempts * 1000);
-    reconnectTimer = setTimeout(() => {
-      connect();
-    }, delay);
-  };
-
-  const connect = () => {
-    if (isClosed || !wsCandidates.length) return;
-
-    const base = wsCandidates[currentCandidateIndex % wsCandidates.length];
-    currentCandidateIndex += 1;
-    const separator = base.includes("?") ? "&" : "?";
-    const url = token ? `${base}${separator}token=${token}` : base;
-
-    try {
-      socket = new WebSocket(url);
-    } catch (error) {
-      scheduleReconnect();
+  socketIoScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-socket-io-cdn="${SOCKET_IO_CDN}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.io), { once: true });
+      existing.addEventListener("error", reject, { once: true });
       return;
     }
 
-    socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        onPayload?.(payload);
-        if (shouldRefreshByPayload(payload)) {
-          onRefresh?.();
-        }
-      } catch {
-        // Non-JSON payload bo'lsa ham refresh qilish xavfsiz.
-        onPayload?.(null);
-        onRefresh?.();
-      }
-    };
+    const script = document.createElement("script");
+    script.src = SOCKET_IO_CDN;
+    script.async = true;
+    script.defer = true;
+    script.dataset.socketIoCdn = SOCKET_IO_CDN;
+    script.onload = () => resolve(window.io);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
 
-    socket.onclose = () => {
-      if (socket) socket = null;
-      failedAttempts += 1;
-      scheduleReconnect();
-    };
+  return socketIoScriptPromise;
+};
 
-    socket.onerror = () => {
-      if (socket) {
-        socket.close();
-      }
-    };
+const notifyPayload = ({ eventName, payload, onPayload, onRefresh }) => {
+  const envelope = {
+    event: eventName,
+    notification: payload?.notification || payload?.data || payload || null,
+    raw: payload || null,
   };
+  onPayload?.(envelope);
+  if (eventName === "notifications:new" || eventName === "notifications:push") {
+    onRefresh?.();
+  }
+};
 
-  connect();
+export const connectNotificationRealtime = ({ onRefresh, onPayload, onStatus }) => {
+  const wsEnabled = import.meta.env.VITE_ENABLE_NOTIFICATION_WS !== "false";
+  if (!wsEnabled) return () => {};
+
+  const token = getAccessToken();
+  if (!token) return () => {};
+
+  let socket = null;
+  let disposed = false;
+
+  loadSocketIoClient()
+    .then((io) => {
+      if (!io || disposed) return;
+
+      socket = io(resolveSocketBaseUrl(), {
+        transports: ["websocket", "polling"],
+        auth: { token },
+        query: { token },
+        withCredentials: true,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 20000,
+      });
+
+      socket.on("connect", () => {
+        onStatus?.({ type: "connected", socketId: socket.id });
+      });
+
+      socket.on("connect_error", (error) => {
+        onStatus?.({
+          type: "connect_error",
+          message: error?.message || "Socket ulanish xatosi",
+        });
+      });
+
+      socket.on("disconnect", (reason) => {
+        onStatus?.({ type: "disconnected", reason: reason || "unknown" });
+      });
+
+      socket.on("notifications:connected", (payload) => {
+        notifyPayload({ eventName: "notifications:connected", payload, onPayload, onRefresh });
+      });
+
+      socket.on("notifications:new", (payload) => {
+        notifyPayload({ eventName: "notifications:new", payload, onPayload, onRefresh });
+      });
+
+      socket.on("notifications:push", (payload) => {
+        notifyPayload({ eventName: "notifications:push", payload, onPayload, onRefresh });
+      });
+    })
+    .catch(() => {
+      onStatus?.({ type: "script_error", message: "socket.io client yuklanmadi" });
+    });
 
   return () => {
-    isClosed = true;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (socket) socket.close();
+    disposed = true;
+    if (socket) {
+      socket.off("notifications:connected");
+      socket.off("notifications:new");
+      socket.off("notifications:push");
+      socket.disconnect();
+    }
   };
 };

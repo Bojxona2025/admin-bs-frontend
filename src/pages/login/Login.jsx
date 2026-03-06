@@ -351,7 +351,7 @@ export default function SkladLogin() {
             return;
           }
         }
-
+        window.dispatchEvent(new Event("auth-changed"));
         window.location.replace("/indicators/general");
         return;
       }
