@@ -1,4 +1,9 @@
-const API_BASE = (import.meta.env.VITE_BASE_URL || "").replace(/\/+$/, "");
+const normalizeBase = (value) => String(value || "").replace(/\/+$/, "");
+const RUNTIME_ORIGIN =
+  typeof window !== "undefined" && window.location?.origin
+    ? window.location.origin
+    : "";
+const API_BASE = normalizeBase(import.meta.env.VITE_BASE_URL || `${RUNTIME_ORIGIN}/api`);
 
 export const ASSET_BASE = API_BASE.replace(/\/api$/i, "");
 
@@ -29,6 +34,10 @@ export const toAssetUrl = (path) => {
   if (!normalized) return "";
 
   if (normalized.startsWith("uploads/")) {
+    const isAbsoluteApiBase = /^https?:\/\//i.test(API_BASE);
+    if (isAbsoluteApiBase) {
+      return encodeURI(`${ASSET_BASE}/${normalized}`);
+    }
     return encodeURI(`/api/${normalized}`);
   }
 
@@ -83,8 +92,8 @@ export const toAssetCandidates = (path) => {
   const rawCandidates = normalized.startsWith("uploads/")
     ? [
         `/api/${normalized}`,
-        `${API_BASE}/${normalized}`,
         `${ASSET_BASE}/${normalized}`,
+        `${API_BASE}/${normalized}`,
         `/${normalized}`,
       ]
     : [

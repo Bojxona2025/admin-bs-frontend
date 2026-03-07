@@ -9,12 +9,17 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:5342",
+        target: "https://bsmarket.uz",
         changeOrigin: true,
       },
       "/uploads": {
-        target: "http://localhost:5342",
+        target: "https://bsmarket.uz",
         changeOrigin: true,
+      },
+      "/socket.io": {
+        target: "https://bsmarket.uz",
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

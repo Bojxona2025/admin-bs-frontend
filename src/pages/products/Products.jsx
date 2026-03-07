@@ -53,6 +53,75 @@ export const InventoryManagement = () => {
   });
 
   const debounceRef = useRef(null);
+  const activeRequestRef = useRef(null);
+  const requestSeqRef = useRef(0);
+  const lastCriteriaKeyRef = useRef("");
+
+  const fetchProducts = useCallback(async (page = 1, search = "") => {
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
+
+    if (activeRequestRef.current) {
+      activeRequestRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeRequestRef.current = controller;
+
+    setDataLoad(true);
+    try {
+      if (search && search.trim() !== "") {
+        const { data } = await productsApi.searchByQuery(
+          {
+            name: search,
+            limit: rowsPerPage,
+            page,
+            sortBy,
+          },
+          { signal: controller.signal }
+        );
+        if (requestSeqRef.current !== requestId) return;
+        setProducts({
+          productData: data.results || data.productData || data.data || [],
+          currentPage: data.page || page,
+          totalPages:
+            data.totalPages || Math.ceil((data.total || 0) / rowsPerPage) || 1,
+          totalItems: data.total || data.totalItems || 0,
+        });
+        return;
+      }
+
+      const { data } = await productsApi.listAll(
+        {
+          limit: rowsPerPage,
+          page,
+          sortBy,
+        },
+        { signal: controller.signal }
+      );
+      if (requestSeqRef.current !== requestId) return;
+      setProducts({
+        productData: data.productData || data.data || [],
+        currentPage: page,
+        totalPages: data.totalPages || 1,
+        totalItems: data.totalItems || data.total || 0,
+      });
+    } catch (error) {
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+        return;
+      }
+      console.error("Mahsulotlarni yuklashda xatolik:", error);
+      setProducts({
+        productData: [],
+        currentPage: 1,
+        totalPages: 1,
+        totalItems: 0,
+      });
+    } finally {
+      if (requestSeqRef.current === requestId) {
+        setDataLoad(false);
+      }
+    }
+  }, [rowsPerPage, sortBy]);
 
   // Debounce funksiyasi - foydalanuvchi yozishni to'xtatgandan keyin search qiladi
   const debouncedSetSearch = useCallback((value) => {
@@ -84,9 +153,12 @@ export const InventoryManagement = () => {
   const handleRefresh = useCallback(() => {
     setSearchTerm("");
     setDebouncedSearchTerm("");
-    setProducts((prev) => ({ ...prev, currentPage: 1 }));
-    fetchProducts(1);
-  }, []);
+    if (products.currentPage !== 1) {
+      setProducts((prev) => ({ ...prev, currentPage: 1 }));
+      return;
+    }
+    fetchProducts(1, "");
+  }, [fetchProducts, products.currentPage]);
 
   const handleProductClick = useCallback((product) => {
     navigate(`/products/detail/${product._id}`);
@@ -102,7 +174,6 @@ export const InventoryManagement = () => {
 
   const handlePageChange = (page) => {
     setProducts((prev) => ({ ...prev, currentPage: page }));
-    fetchProducts(page, debouncedSearchTerm);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -120,72 +191,26 @@ export const InventoryManagement = () => {
     }
   };
 
-  // Birinchi yuklanganda va rowsPerPage o'zgarganda
   useEffect(() => {
-    setProducts((prev) => ({ ...prev, currentPage: 1 }));
-    fetchProducts(1, debouncedSearchTerm);
-  }, [rowsPerPage]);
+    const criteriaKey = `${rowsPerPage}|${debouncedSearchTerm}|${sortBy}`;
+    const criteriaChanged =
+      lastCriteriaKeyRef.current !== "" && lastCriteriaKeyRef.current !== criteriaKey;
+    lastCriteriaKeyRef.current = criteriaKey;
 
-  // Search termi o'zgarganda
-  useEffect(() => {
-    if (debouncedSearchTerm !== undefined) {
+    if (criteriaChanged && products.currentPage !== 1) {
       setProducts((prev) => ({ ...prev, currentPage: 1 }));
-      fetchProducts(1, debouncedSearchTerm);
+      return;
     }
-  }, [debouncedSearchTerm]);
+    fetchProducts(products.currentPage, debouncedSearchTerm);
+  }, [fetchProducts, products.currentPage, debouncedSearchTerm, rowsPerPage, sortBy]);
 
   useEffect(() => {
-    setProducts((prev) => ({ ...prev, currentPage: 1 }));
-    fetchProducts(1, debouncedSearchTerm);
-  }, [sortBy]);
-
-  async function fetchProducts(page = products.currentPage, search = "") {
-    try {
-      setDataLoad(true);
-
-      if (search && search.trim() !== "") {
-        const { data } = await productsApi.searchByQuery({
-          name: search,
-          limit: rowsPerPage,
-          page,
-          sortBy,
-        });
-        console.log("API javob:", data);
-        setProducts({
-          productData: data.results || data.productData || data.data || [],
-          currentPage: data.page || page,
-          totalPages:
-            data.totalPages || Math.ceil((data.total || 0) / rowsPerPage) || 1,
-          totalItems: data.total || data.totalItems || 0,
-        });
-        return;
-      } else {
-        const { data } = await productsApi.listAll({
-          limit: rowsPerPage,
-          page,
-          sortBy,
-        });
-        console.log("API javob:", data);
-        setProducts({
-          productData: data.productData || data.data || [],
-          currentPage: page,
-          totalPages: data.totalPages || 1,
-          totalItems: data.totalItems || data.total || 0,
-        });
-        return;
+    return () => {
+      if (activeRequestRef.current) {
+        activeRequestRef.current.abort();
       }
-    } catch (error) {
-      console.error("Mahsulotlarni yuklashda xatolik:", error);
-      setProducts({
-        productData: [],
-        currentPage: 1,
-        totalPages: 1,
-        totalItems: 0,
-      });
-    } finally {
-      setDataLoad(false);
-    }
-  }
+    };
+  }, []);
 
   const extractCompanyId = useCallback((product) => {
     const raw = product?.companyId ?? product?.company?._id ?? product?.company;

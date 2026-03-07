@@ -12,6 +12,7 @@ const RATE_LIMIT_WINDOW_MS = 2000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 const DUPLICATE_GUARD_MS = 700;
 const RETRYABLE_METHODS = new Set(["get", "head", "options"]);
+const GUARDED_METHODS = new Set(["post", "put", "patch", "delete"]);
 const MAX_429_RETRIES = 3;
 const REQUEST_GUARD_BYPASS_PATHS = ["/emu/create/express-order"];
 let backendDownEmitted = false;
@@ -196,6 +197,10 @@ const shouldBypassRequestGuards = (config) => {
   if (!rawUrl) return false;
   return REQUEST_GUARD_BYPASS_PATHS.some((path) => rawUrl.includes(path));
 };
+const shouldApplyClientRequestGuards = (config) => {
+  const method = String(config?.method || "get").toLowerCase();
+  return GUARDED_METHODS.has(method);
+};
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const extractAccessToken = (data) =>
   data?.access_token ||
@@ -234,7 +239,8 @@ const processQueue = (error, token = null) => {
 
 $api.interceptors.request.use(
   (config) => {
-    const bypassGuards = shouldBypassRequestGuards(config);
+    const bypassGuards =
+      shouldBypassRequestGuards(config) || !shouldApplyClientRequestGuards(config);
     if (!bypassGuards) {
       if (!canSendRequest()) {
         return Promise.reject(

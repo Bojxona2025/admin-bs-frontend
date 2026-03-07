@@ -1,16 +1,18 @@
 module.exports = {
     apps: [
         {
-            name: "next-app",
-            script: "./node_modules/next/dist/bin/next",
-            args: "start -p 3000",
+            name: "admin-frontend",
+            script: "npx",
+            args: "serve -s dist -l 5173",
 
             env: {
                 NODE_ENV: "production",
-                VITE_BASE_URL: "https://bsmarket.uz/api"
+                VITE_BASE_URL: "https://bsmarket.uz/api",
+                VITE_NOTIFICATION_SOCKET_URL: "https://bsmarket.uz",
+
             },
         },
     ],
-};  
+};
 
-           
+

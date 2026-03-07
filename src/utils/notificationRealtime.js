@@ -8,10 +8,15 @@ const normalizeBaseUrl = (baseUrl) =>
     .replace(/\/+$/, "");
 
 const getAccessToken = () =>
-  localStorage.getItem("accessToken") ||
-  localStorage.getItem("access_token") ||
-  localStorage.getItem("token") ||
-  "";
+  String(
+    localStorage.getItem("accessToken") ||
+      localStorage.getItem("access_token") ||
+      localStorage.getItem("token") ||
+      ""
+  )
+    .replace(/^Bearer\s+/i, "")
+    .replace(/^"+|"+$/g, "")
+    .trim();
 
 const resolveSocketBaseUrl = () => {
   const explicit =
@@ -22,7 +27,16 @@ const resolveSocketBaseUrl = () => {
   const apiBase = normalizeBaseUrl(import.meta.env.VITE_BASE_URL);
   if (apiBase) return apiBase.replace(/\/api$/i, "");
 
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return normalizeBaseUrl(window.location.origin);
+  }
+
   return "https://bsmarket.uz";
+};
+const resolveSocketPath = () => {
+  const explicit = String(import.meta.env.VITE_NOTIFICATION_SOCKET_PATH || "").trim();
+  if (!explicit) return "/socket.io";
+  return explicit.startsWith("/") ? explicit : `/${explicit}`;
 };
 
 const loadSocketIoClient = () => {
@@ -78,9 +92,9 @@ export const connectNotificationRealtime = ({ onRefresh, onPayload, onStatus }) 
       if (!io || disposed) return;
 
       socket = io(resolveSocketBaseUrl(), {
+        path: resolveSocketPath(),
         transports: ["websocket", "polling"],
         auth: { token },
-        query: { token },
         withCredentials: true,
         reconnection: true,
         reconnectionAttempts: Infinity,

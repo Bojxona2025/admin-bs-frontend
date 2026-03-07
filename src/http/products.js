@@ -6,7 +6,7 @@ const productsApi = {
     $api.patch(`/products/update/${productId}`, payload, config),
   remove: (productId) => $api.delete(`/products/delete/${productId}`),
 
-  listAll: (params = {}) => $api.get("/products/lists/all", { params }),
+  listAll: (params = {}, config = {}) => $api.get("/products/lists/all", { params, ...config }),
   getArchives: (params = {}) => $api.get("/products/get/archives", { params }),
   getDeleted: (params = {}) =>
     $api.get("/products/get/deleted/data", { params }),
@@ -14,7 +14,7 @@ const productsApi = {
   getVariantById: (variantId) =>
     $api.get(`/products/get/variant/by/${variantId}`),
 
-  searchByQuery: (params = {}) => $api.get("/products/get/query", { params }),
+  searchByQuery: (params = {}, config = {}) => $api.get("/products/get/query", { params, ...config }),
   getPopular: (params = {}) => $api.get("/products/get/popular", { params }),
   getDiscounted: (params = {}) =>
     $api.get("/products/get/discounted", { params }),
