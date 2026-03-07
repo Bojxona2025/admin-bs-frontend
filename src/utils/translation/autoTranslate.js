@@ -25,7 +25,27 @@ const CYRILLIC_MAP = {
   z: "з",
 };
 
-const normalizeText = (value) => String(value || "").replace(/\s+/g, " ").trim();
+const decodeHtmlEntities = (value) => {
+  const input = String(value || "");
+  if (!input || !input.includes("&")) return input;
+
+  // Browser-safe decode for entities like &#39;, &quot;, &amp;
+  if (typeof document !== "undefined") {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = input;
+    return textarea.value;
+  }
+
+  return input
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+};
+
+const normalizeText = (value) =>
+  decodeHtmlEntities(String(value || "")).replace(/\s+/g, " ").trim();
 
 const translitUzToRu = (text) => {
   const normalized = normalizeText(text).toLowerCase();

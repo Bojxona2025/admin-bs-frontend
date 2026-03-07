@@ -3,7 +3,6 @@ import { useSelector } from "react-redux";
 import {
   AlertCircle,
   Ban,
-  Calendar,
   Lock,
   Monitor,
   Pencil,
@@ -202,7 +201,6 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    email: "",
     phoneNumber: "",
     gender: "",
   });
@@ -260,7 +258,6 @@ export default function ProfilePage() {
       setFormData({
         firstName: profile.firstName || "",
         lastName: profile.lastName || "",
-        email: profile.email || "",
         phoneNumber: profile.phoneNumber || "",
         gender: profile.gender || "",
       });
@@ -285,7 +282,6 @@ export default function ProfilePage() {
       const payload = {};
       if (formData.firstName !== profileData?.firstName) payload.firstName = formData.firstName;
       if (formData.lastName !== profileData?.lastName) payload.lastName = formData.lastName;
-      if (formData.email !== profileData?.email) payload.email = formData.email;
       if ((formData.gender || "") !== (profileData?.gender || "")) payload.gender = formData.gender;
 
       if (!Object.keys(payload).length) {
@@ -600,7 +596,6 @@ export default function ProfilePage() {
               {[
                 { key: "firstName", label: "Ism", icon: <User size={15} /> },
                 { key: "lastName", label: "Familiya", icon: <User size={15} /> },
-                { key: "email", label: "Elektron pochta", icon: <Calendar size={15} /> },
                 { key: "phoneNumber", label: "Telefon", icon: <Phone size={15} /> },
                 { key: "gender", label: "Jinsi", icon: <User size={15} /> },
                 { key: "companyName", label: "Kompaniya", icon: <Shield size={15} /> },
@@ -635,7 +630,7 @@ export default function ProfilePage() {
                     ) : (
                       <input
                         name={field.key}
-                        type={field.key === "email" ? "email" : "text"}
+                        type="text"
                         value={formData[field.key] || ""}
                         onChange={(e) =>
                           setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))
@@ -672,7 +667,6 @@ export default function ProfilePage() {
                         setFormData({
                           firstName: profileData?.firstName || "",
                           lastName: profileData?.lastName || "",
-                          email: profileData?.email || "",
                           phoneNumber: profileData?.phoneNumber || "",
                           gender: profileData?.gender || "",
                         });

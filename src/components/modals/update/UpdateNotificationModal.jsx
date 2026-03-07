@@ -423,7 +423,7 @@ export default function UpdateNotificationModal({
                                   {user.firstName} {user.lastName}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {user.email} • {user.phoneNumber}
+                                  {user.phoneNumber || "Telefon yo'q"}
                                 </div>
                               </div>
                             </label>

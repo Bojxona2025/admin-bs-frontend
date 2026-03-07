@@ -48,7 +48,6 @@ export default function AdminPage() {
 
   const [userForm, setUserForm] = useState({
     name: "",
-    email: "",
     password: "",
     role: "user",
   });
@@ -191,14 +190,13 @@ export default function AdminPage() {
     try {
       const payload = {
         name: userForm.name.trim(),
-        email: userForm.email.trim(),
         password: userForm.password,
         role: userForm.role,
       };
 
       await $api.post(USER_CREATE_ENDPOINT, payload);
       notify("Foydalanuvchi muvaffaqiyatli yaratildi", "success");
-      setUserForm({ name: "", email: "", password: "", role: "user" });
+      setUserForm({ name: "", password: "", role: "user" });
       await fetchUsers();
       setActivePanel(null);
     } catch (error) {

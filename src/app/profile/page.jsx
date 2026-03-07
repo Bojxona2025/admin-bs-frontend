@@ -57,7 +57,6 @@ const ProfileClient = () => {
                 profileData.lastName ||
                 "Foydalanuvchi",
           phone: profileData.phoneNumber || "",
-          email: profileData.email || "",
           avatar: profileData.avatar
             ? `${API_ORIGIN}${profileData.avatar}`
             : null,
@@ -118,9 +117,6 @@ const ProfileClient = () => {
       }
       if (updatedData.lastName !== user.lastName) {
         changedFields.lastName = updatedData.lastName;
-      }
-      if (updatedData.email !== user.email) {
-        changedFields.email = updatedData.email;
       }
       if (updatedData.phone !== user.phone) {
         changedFields.phoneNumber = updatedData.phone;

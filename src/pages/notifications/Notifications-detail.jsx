@@ -204,7 +204,6 @@ const NotificationsDetail = () => {
                   <h3 className="font-semibold text-slate-900">
                     {userInfo.firstName} {userInfo.lastName}
                   </h3>
-                  <p className="text-sm text-slate-600">{userInfo.email}</p>
                   <p className="text-xs text-slate-500">ID: {userId}</p>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 "use client";
-import { Edit, User, Calendar, Phone, Mail, Users } from "lucide-react";
+import { Edit, User, Calendar, Phone, Users } from "lucide-react";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,6 @@ const ProfileTab = ({ user, isEditing, setIsEditing, updateUserProfile }) => {
   const [formData, setFormData] = useState({
     firstName: user.firstName || "",
     lastName: user.lastName || "",
-    email: user.email || "",
     phone: user.phone || "",
     gender: user.gender || "",
   });
@@ -28,11 +27,6 @@ const ProfileTab = ({ user, isEditing, setIsEditing, updateUserProfile }) => {
   const handleSave = async () => {
     if (!formData.firstName || !formData.lastName || !formData.phone) {
       setError(t("profile.validation.required_fields"));
-      return;
-    }
-
-    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
-      setError(t("profile.validation.invalid_email"));
       return;
     }
 
@@ -58,7 +52,6 @@ const ProfileTab = ({ user, isEditing, setIsEditing, updateUserProfile }) => {
     setFormData({
       firstName: user.firstName || "",
       lastName: user.lastName || "",
-      email: user.email || "",
       phone: user.phone || "",
       gender: user.gender || "",
     });
@@ -209,19 +202,6 @@ const ProfileTab = ({ user, isEditing, setIsEditing, updateUserProfile }) => {
                 onChange={handleInputChange}
                 disabled={!isEditing}
                 placeholder="+998901234567"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="email">{t("profile.fields.email")}</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                disabled={!isEditing}
-                placeholder="email@example.com"
               />
             </div>
 
